@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional
 import uuid
-
 from sqlalchemy import ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,3 +51,11 @@ class Message(Base):
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
 
 
+class ChatHistory(Base):
+    __tablename__ = "chat_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String, index=True)  # unique chat ID per user
+    role = Column(String)  # 'user' or 'assistant'
+    message = Column(Text)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())

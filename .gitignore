@@ -23,3 +23,5 @@ tmp/
 temp/
 *.tmp
 *.temp
+.pyc
+pycache/
