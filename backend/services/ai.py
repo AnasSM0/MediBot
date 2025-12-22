@@ -8,6 +8,14 @@ from typing import AsyncGenerator, Optional
 from sqlalchemy.orm import Session
 from models import ChatHistory
 
+# Import API monitoring (optional, graceful degradation if not available)
+try:
+    from api_monitor import log_api_call
+except ImportError:
+    # Fallback if monitoring is not available
+    def log_api_call(*args, **kwargs):
+        pass
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -45,7 +53,7 @@ DATASET = _load_local_dataset()
 def _match_symptoms(user_message: str) -> str:
     """Find top-matching diseases based on user symptoms."""
     if not DATASET:
-        return "No local dataset found."
+        return ""  # Return empty string instead of error message
 
     user_symptoms = {w.strip().lower() for w in user_message.replace(",", " ").split()}
 
@@ -56,7 +64,7 @@ def _match_symptoms(user_message: str) -> str:
             scored.append((entry["disease"], match_count, entry["symptoms"]))
 
     if not scored:
-        return "No close matches found for the given symptoms."
+        return ""
 
     # Sort by most matches
     scored.sort(key=lambda x: x[1], reverse=True)
@@ -95,14 +103,16 @@ def _build_prompt(user_message: str) -> str:
 
     return (
         "You are MediBot, an empathetic medical triage assistant.\n\n"
-        "Use both the **local dataset analysis** and your medical reasoning to provide:\n"
-        "1) Most likely mild/common conditions (avoid diagnosing with certainty)\n"
-        "2) Practical self-care and home remedies\n"
-        "3) Over-the-counter (OTC) options if appropriate\n"
-        "4) Red-flag warning signs that require medical attention\n"
-        f"5) Disclaimer: {SYSTEM_DISCLAIMER}\n\n"
-        "Format the answer in markdown with short sections and bullet points.\n\n"
-        f"### User Symptoms:\n{user_message.strip()}\n\n"
+        "INSTRUCTIONS:\n"
+        "1. **General Conversation**: If the user says 'hello', 'hi', 'yo', 'wassup', asks who you are, or makes small talk, respond naturally and briefly. Introduce yourself as MediBot if asked. DO NOT provide medical advice for greetings.\n"
+        "2. **Medical Queries**: If the user describes symptoms, asks about medication, or provides an image analysis, follow this structure:\n"
+        "   - Most likely mild/common conditions (avoid diagnosing with certainty)\n"
+        "   - Practical self-care and home remedies\n"
+        "   - Over-the-counter (OTC) options if appropriate\n"
+        "   - Red-flag warning signs that require medical attention\n"
+        f"   - Disclaimer: {SYSTEM_DISCLAIMER}\n\n"
+        "Format medical answers in markdown with short sections and bullet points.\n\n"
+        f"### User Input:\n{user_message.strip()}\n\n"
         f"{dataset_context}\n"
     )
 
@@ -114,18 +124,20 @@ async def _stream_gemini(user_message: str) -> AsyncGenerator[str, None]:
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
+        # Use gemini-1.5-flash (better rate limits)
         model = genai.GenerativeModel(model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
 
         stream = model.generate_content(_build_prompt(user_message), stream=True)
+        log_api_call("gemini", "/chat", "text", success=True, metadata={"model": os.getenv("GEMINI_MODEL", "gemini-1.5-flash")})
         for chunk in stream:
             if hasattr(chunk, "text") and chunk.text:
                 yield chunk.text
             await asyncio.sleep(0)
-        return
-    except Exception:
-        pass
-    async for c in _stream_openrouter(user_message):
-        yield c
+    except Exception as e:
+        print(f"❌ Gemini Error: {e}")
+        log_api_call("gemini", "/chat", "text", success=False, error=str(e))
+        # Don't fallback here - let the caller handle it
+        yield f"Error: Unable to process request with Gemini. {str(e)}"
 
 # ==========================================
 # 🔹 OpenRouter Streaming
@@ -150,40 +162,65 @@ async def _stream_openrouter(user_message: str) -> AsyncGenerator[str, None]:
         "stream": True,
     }
 
-    async with httpx.AsyncClient(timeout=None) as client:
-        async with client.stream("POST", "https://openrouter.ai/api/v1/chat/completions", json=body, headers=headers) as r:
-            async for line in r.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                data = line.replace("data:", "").strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    import json
-                    obj = json.loads(data)
-                    delta = obj.get("choices", [{}])[0].get("delta", {}).get("content")
-                    if delta:
-                        yield delta
-                except Exception:
-                    continue
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream("POST", "https://openrouter.ai/api/v1/chat/completions", json=body, headers=headers) as r:
+                log_api_call("openrouter", "/chat", "text", success=True, metadata={"model": os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free")})
+                async for line in r.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line.replace("data:", "").strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        import json
+                        obj = json.loads(data)
+                        delta = obj.get("choices", [{}])[0].get("delta", {}).get("content")
+                        if delta:
+                            yield delta
+                    except Exception:
+                        continue
+    except Exception as e:
+        log_api_call("openrouter", "/chat", "text", success=False, error=str(e))
+        raise
 
 # ==========================================
 # 🔹 Local Rule-Based Fallback
 # ==========================================
 
 async def _local_rule_based(user_message: str) -> AsyncGenerator[str, None]:
+    log_api_call("local", "/chat", "text", success=True, metadata={"fallback": True})
+    
+    # Detect greetings and identity questions
+    msg_lower = user_message.lower()
+    greeting_keywords = ["hello", "hi", "hey", "yo", "wassup", "sup", "who are you", "name", "model", "what are you"]
+    
+    if any(keyword in msg_lower for keyword in greeting_keywords):
+        text = "Hey! I'm MediBot, your medical triage assistant. I'm here to help answer health-related questions. How can I assist you today?"
+        for chunk in text.split():
+            yield chunk + " "
+            await asyncio.sleep(0)
+        return
+
     severity = _detect_severity(user_message)
     dataset_context = _match_symptoms(user_message)
 
-    text = (
-        f"# Overview\n\n"
-        f"{dataset_context}\n"
-        f"## General Advice\n"
-        f"- Stay hydrated, rest well, and monitor your symptoms.\n"
-        f"- Over-the-counter pain relievers may help for mild discomfort.\n"
-        f"- Avoid self-medicating antibiotics.\n\n"
-        f"> Disclaimer: {SYSTEM_DISCLAIMER}\n"
-    )
+    if dataset_context:
+        text = (
+            f"# Overview\n\n"
+            f"{dataset_context}\n"
+            f"## General Advice\n"
+            f"- Stay hydrated, rest well, and monitor your symptoms.\n"
+            f"- Over-the-counter pain relievers may help for mild discomfort.\n"
+            f"- Avoid self-medicating antibiotics.\n\n"
+            f"> Disclaimer: {SYSTEM_DISCLAIMER}\n"
+        )
+    else:
+        text = (
+            "I'm currently running in offline mode. "
+            "I can help with general health questions if you describe your symptoms. "
+            "For urgent medical issues, please consult a healthcare professional immediately."
+        )
 
     for chunk in text.split():
         yield chunk + " "
@@ -194,11 +231,19 @@ async def _local_rule_based(user_message: str) -> AsyncGenerator[str, None]:
 # ==========================================
 
 async def stream_response(user_message: str) -> AsyncGenerator[str, None]:
+    # Prefer OpenRouter for text reasoning to conserve Gemini API requests
+    # Gemini should primarily be used only for vision tasks (in vision.py)
+    if OPENROUTER_API_KEY:
+        async for chunk in _stream_openrouter(user_message):
+            yield chunk
+        return
+    # Fallback to Gemini only if OpenRouter is unavailable
     if GEMINI_API_KEY:
         async for chunk in _stream_gemini(user_message):
             yield chunk
         return
-    async for chunk in _stream_openrouter(user_message):
+    # Last resort: local rule-based system
+    async for chunk in _local_rule_based(user_message):
         yield chunk
 
 def detect_severity(user_message: str, assistant_text: Optional[str] = None) -> str:

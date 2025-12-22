@@ -7,7 +7,8 @@ import os
 from routes.chat import router as chat_router
 from routes.history import router as history_router
 from routes.auth import router as auth_router
-from database import init_models
+from database import init_models, engine
+from sqlalchemy import text
 
 
 load_dotenv()
@@ -37,6 +38,15 @@ app.include_router(auth_router, prefix="/auth")
 
 @app.get("/healthz")
 async def healthz():
-    return {"ok": True}
+    try:
+        # Check database connection
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "database": str(e)}
+        )
 
 

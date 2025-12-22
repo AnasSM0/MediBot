@@ -111,7 +111,7 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
     bottomRef.current.scrollIntoView({ behavior: "smooth" });
   }, [messages, isStreaming]);
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, image?: File) => {
     if (!accessToken && !allowAnon) {
       toast({
         title: "Please sign in",
@@ -124,7 +124,7 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content,
+      content: image ? `[Image Uploaded] ${content}` : content,
       createdAt: new Date().toISOString(),
     };
     const assistantMessageId = crypto.randomUUID();
@@ -141,6 +141,7 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
     await streamChat({
       token: accessToken,
       message: content,
+      image,
       sessionId: activeSessionId ?? undefined,
       onChunk: (chunk) => {
         setMessages((prev) =>

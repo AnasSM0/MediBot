@@ -9,3 +9,4 @@ python-jose==3.3.0
 google-generativeai==0.8.3
 orjson==3.10.7
 
+python-multipart==0.0.9

@@ -23,5 +23,9 @@ tmp/
 temp/
 *.tmp
 *.temp
-.pyc
-pycache/
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.DS_Store
+coverage/
