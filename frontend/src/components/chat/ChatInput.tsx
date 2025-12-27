@@ -4,6 +4,7 @@ import { FormEvent, KeyboardEvent, useRef, useState, ChangeEvent } from "react";
 import { SendHorizonal, Paperclip, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { cn } from "@/lib/utils";
 
 type ChatInputProps = {
@@ -67,6 +68,12 @@ export function ChatInput({ placeholder = "Describe your symptoms...", disabled,
     }
   };
 
+  const handleVoiceTranscript = (transcript: string) => {
+    setValue(transcript);
+    // Auto-focus textarea after voice input
+    textareaRef.current?.focus();
+  };
+
   return (
     <div className="relative flex w-full flex-col gap-2">
       {previewUrl && (
@@ -102,6 +109,11 @@ export function ChatInput({ placeholder = "Describe your symptoms...", disabled,
         >
           <Paperclip className="h-5 w-5" />
         </Button>
+
+        <VoiceInputButton
+          onTranscript={handleVoiceTranscript}
+          disabled={disabled || isSending}
+        />
 
         <textarea
           ref={textareaRef}

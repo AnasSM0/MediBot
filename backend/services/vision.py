@@ -13,8 +13,19 @@ except ImportError:
     def log_api_call(*args, **kwargs):
         pass
 
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# Debug: Log which API keys are available
+print(f"🔑 Vision API Keys Status:")
+print(f"  - GEMINI_API_KEY: {'✅ SET' if GEMINI_API_KEY else '❌ NOT SET'}")
+print(f"  - OPENROUTER_API_KEY: {'✅ SET' if OPENROUTER_API_KEY else '❌ NOT SET'}")
+if GEMINI_API_KEY:
+    print(f"  - Gemini Key Preview: {GEMINI_API_KEY[:20]}...")
+if OPENROUTER_API_KEY:
+    print(f"  - OpenRouter Key Preview: {OPENROUTER_API_KEY[:20]}...")
+
 
 # Vision analysis prompt (shared between Gemini and OpenRouter)
 VISION_PROMPT = """
@@ -81,24 +92,29 @@ async def _analyze_with_gemini(content: bytes, mime_type: str) -> str:
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY is not set")
     
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    image_part = {
-        "mime_type": mime_type or "image/jpeg",
-        "data": content
-    }
-    
-    response = await model.generate_content_async(
-        [VISION_PROMPT, image_part],
-        generation_config={"response_mime_type": "application/json"}
-    )
-    
-    log_api_call("gemini", "/chat/image", "vision", success=True, metadata={"model": "gemini-1.5-flash"})
-    return response.text
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        image_part = {
+            "mime_type": mime_type or "image/jpeg",
+            "data": content
+        }
+        
+        response = await model.generate_content_async(
+            [VISION_PROMPT, image_part],
+            generation_config={"response_mime_type": "application/json"}
+        )
+        
+        log_api_call("gemini", "/chat/image", "vision", success=True, metadata={"model": "gemini-1.5-flash"})
+        print(f"✅ Gemini vision analysis successful")
+        return response.text
+    except Exception as e:
+        print(f"⚠️ Gemini vision error details: {type(e).__name__}: {str(e)}")
+        raise
 
 async def _analyze_with_openrouter(content: bytes, mime_type: str) -> str:
-    """Fallback: Analyze image using OpenRouter's Gemma vision model."""
+    """Fallback: Analyze image using OpenRouter's vision-capable model."""
     if not OPENROUTER_API_KEY:
         raise Exception("OPENROUTER_API_KEY is not set")
     
@@ -109,10 +125,13 @@ async def _analyze_with_openrouter(content: bytes, mime_type: str) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",  # Required by OpenRouter
+        "X-Title": "MediBot",  # Optional but recommended
     }
     
+    # Use Gemma 3 27B which supports vision (multimodal)
     body = {
-        "model": "google/gemma-2-9b-it:free",  # Free vision-capable model
+        "model": "google/gemma-3-27b-it:free",  # Free multimodal model with vision support
         "messages": [
             {
                 "role": "user",
@@ -129,23 +148,38 @@ async def _analyze_with_openrouter(content: bytes, mime_type: str) -> str:
                     }
                 ]
             }
-        ],
-        "response_format": {"type": "json_object"}
+        ]
     }
     
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            json=body,
-            headers=headers
-        )
-        response.raise_for_status()
-        result = response.json()
-        
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
-        log_api_call("openrouter", "/chat/image", "vision", success=True, metadata={"model": "google/gemma-2-9b-it:free"})
-        return content
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                json=body,
+                headers=headers
+            )
+            
+            # Log the response for debugging
+            print(f"📡 OpenRouter Response Status: {response.status_code}")
+            
+            if response.status_code != 200:
+                error_text = response.text
+                print(f"❌ OpenRouter Error Response: {error_text}")
+                response.raise_for_status()
+            
+            result = response.json()
+            
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            log_api_call("openrouter", "/chat/image", "vision", success=True, metadata={"model": "google/gemma-3-27b-it:free"})
+            print(f"✅ OpenRouter vision analysis successful")
+            return content
+    except httpx.HTTPStatusError as e:
+        print(f"❌ OpenRouter HTTP Error: {e.response.status_code} - {e.response.text}")
+        raise
+    except Exception as e:
+        print(f"❌ OpenRouter Unexpected Error: {type(e).__name__}: {str(e)}")
+        raise
 
 async def analyze_image(file: UploadFile) -> str:
     """
@@ -170,10 +204,10 @@ async def analyze_image(file: UploadFile) -> str:
                 log_api_call("gemini", "/chat/image", "vision", success=False, error=str(gemini_error))
                 # Continue to fallback
         
-        # Fallback to OpenRouter Gemma
+        # Fallback to OpenRouter Gemma 3 27B (multimodal with vision)
         if OPENROUTER_API_KEY:
             try:
-                print("ℹ️ Using OpenRouter Gemma fallback for vision analysis")
+                print("ℹ️ Using OpenRouter Gemma 3 27B fallback for vision analysis")
                 result = await _analyze_with_openrouter(content, mime_type)
                 await file.seek(0)  # Reset file pointer
                 return result

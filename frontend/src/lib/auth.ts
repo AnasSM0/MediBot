@@ -12,7 +12,13 @@ declare global {
   var __mediBotPool: Pool | undefined;
 }
 
-const connectionString = process.env.DATABASE_URL;
+let connectionString = process.env.DATABASE_URL;
+
+// Convert asyncpg URL to standard postgres URL if needed
+if (connectionString?.includes('postgresql+asyncpg://')) {
+  connectionString = connectionString.replace('postgresql+asyncpg://', 'postgresql://');
+}
+
 if (!connectionString) {
   console.warn("DATABASE_URL is not set. NextAuth adapter will fail without it.");
 }
@@ -21,8 +27,18 @@ const pool =
   global.__mediBotPool ??
   new Pool({
     connectionString,
-    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
+    ssl: connectionString?.includes('neon.tech') || process.env.NODE_ENV === "production" 
+      ? { rejectUnauthorized: false } 
+      : undefined,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
   });
+
+// Handle pool errors to prevent crashes
+pool.on('error', (err: Error) => {
+  console.error('Unexpected database pool error:', err);
+});
 
 if (process.env.NODE_ENV !== "production") {
   global.__mediBotPool = pool;

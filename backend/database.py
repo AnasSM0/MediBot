@@ -6,10 +6,19 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from .env file if it exists (for local development)
+# In Docker, environment variables are passed via docker-compose.yml
+load_dotenv(override=False)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/medibot")
+# Get DATABASE_URL from environment
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Validate that DATABASE_URL is set
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable is not set. "
+        "Please ensure it's defined in your .env file or docker-compose.yml"
+    )
 
 engine = create_async_engine(DATABASE_URL, future=True, echo=False, pool_pre_ping=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, autoflush=False, autocommit=False, class_=AsyncSession)
