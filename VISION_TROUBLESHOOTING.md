@@ -44,8 +44,7 @@ This will show you:
 1. Check `.env` file location: `e:\work\MediBot\.env`
 2. Verify keys are uncommented:
    ```env
-   GEMINI_API_KEY=AIzaSyCHsTrIBQn-r1ePLvvd1pGYwgArA9KL7gs
-   OPENROUTER_API_KEY=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
+   
    ```
 3. Rebuild backend:
    ```cmd
