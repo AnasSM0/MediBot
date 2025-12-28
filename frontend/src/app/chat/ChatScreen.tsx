@@ -10,10 +10,13 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
+import { VoiceOutputControls } from "@/components/chat/VoiceOutputControls";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/use-toast";
 import { fetchHistory, fetchSession, streamChat } from "@/lib/api";
+import { useVoiceOutput } from "@/hooks/useVoiceOutput";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 
 type Message = {
@@ -43,7 +46,19 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
   const [history, setHistory] = useState<{ id: string; title: string | null; created_at: string }[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Voice output hook
+  const { speak, cancel: cancelSpeech, isSpeaking } = useVoiceOutput({
+    onError: (error) => {
+      console.error("Voice output error:", error);
+    },
+  });
+
+  // Keyboard shortcuts hook
+  const { registerHandler } = useKeyboardShortcuts({ enabled: true });
 
   const accessToken = session?.accessToken;
   // Use build-time public env to avoid SSR/CSR mismatch
@@ -135,6 +150,11 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
       isStreaming: true,
     };
 
+    // Cancel any ongoing speech when user sends a new message
+    if (isSpeaking) {
+      cancelSpeech();
+    }
+
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setIsStreaming(true);
 
@@ -151,8 +171,10 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
         );
       },
       onDone: (payload) => {
-        setMessages((prev) =>
-          prev.map((message) =>
+        let finalContent = "";
+        
+        setMessages((prev) => {
+          const updated = prev.map((message) =>
             message.id === assistantMessageId
               ? {
                   ...message,
@@ -162,11 +184,26 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
                   createdAt: new Date().toISOString(),
                 }
               : message,
-          ),
-        );
+          );
+          
+          // Get the final content for voice output
+          const finalMessage = updated.find((m) => m.id === assistantMessageId);
+          if (finalMessage) {
+            finalContent = finalMessage.content;
+          }
+          
+          return updated;
+        });
+        
         setActiveSessionId(payload.sessionId);
         setIsStreaming(false);
         void refreshHistory();
+        
+        // Speak the response if voice output is enabled
+        if (voiceOutputEnabled && finalContent) {
+          speak(finalContent);
+        }
+        
         if (payload.requiresAttention) {
           toast({
             title: "Potentially urgent symptoms",
@@ -206,6 +243,61 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
     setActiveSessionId(null);
     setMessages([]);
   };
+
+  // Keyboard shortcut handlers
+  useEffect(() => {
+    // Clear chat (Ctrl+K)
+    registerHandler('clear-chat', () => {
+      if (messages.length > 0) {
+        handleNewChat();
+        toast({
+          title: "Chat cleared",
+          description: "Started a new conversation.",
+        });
+      }
+    });
+
+    // Stop voice (Esc)
+    registerHandler('stop-voice', () => {
+      if (isSpeaking) {
+        cancelSpeech();
+        toast({
+          title: "Speech stopped",
+          description: "Voice output has been stopped.",
+        });
+      }
+    });
+
+    // Toggle voice output (Ctrl+M)
+    registerHandler('toggle-voice-output', () => {
+      setVoiceOutputEnabled((prev) => !prev);
+      toast({
+        title: voiceOutputEnabled ? "Voice output disabled" : "Voice output enabled",
+        description: voiceOutputEnabled 
+          ? "Bot responses will no longer be spoken."
+          : "Bot responses will now be spoken aloud.",
+      });
+    });
+
+    // New session (Ctrl+N)
+    registerHandler('new-session', () => {
+      handleNewChat();
+      toast({
+        title: "New session",
+        description: "Started a new chat session.",
+      });
+    });
+
+    // Focus input (/)
+    registerHandler('focus-input', () => {
+      inputRef.current?.focus();
+    });
+
+    // Open settings (Ctrl+,)
+    registerHandler('open-settings', () => {
+      router.push('/settings');
+    });
+  }, [registerHandler, messages.length, isSpeaking, voiceOutputEnabled, cancelSpeech, router]);
 
   const handleRegenerate = (messageId: string) => {
     const index = messages.findIndex((message) => message.id === messageId);
@@ -252,11 +344,19 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
       <div className="flex flex-1 flex-col">
         <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6">
           <Card className="bg-[#1E1E1E]/90 px-6 py-5">
-            <h1 className="text-2xl font-semibold text-foreground">Describe how you’re feeling today</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Share your symptoms, recent changes, and any medications. MediBot will provide gentle guidance, home
-              remedies, and over-the-counter options when appropriate.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h1 className="text-2xl font-semibold text-foreground">Describe how you’re feeling today</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Share your symptoms, recent changes, and any medications. MediBot will provide gentle guidance, home
+                  remedies, and over-the-counter options when appropriate.
+                </p>
+              </div>
+              <VoiceOutputControls
+                enabled={voiceOutputEnabled}
+                onToggle={setVoiceOutputEnabled}
+              />
+            </div>
           </Card>
 
           <Separator className="border-border/70" />

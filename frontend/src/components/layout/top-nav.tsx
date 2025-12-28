@@ -7,6 +7,7 @@ import { ReactNode } from "react";
 import { Stethoscope } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 export function TopNav(): ReactNode {
   const router = useRouter();
@@ -38,6 +39,7 @@ export function TopNav(): ReactNode {
           <Button variant="outline" onClick={handleNewChat} className="hidden sm:flex">
             New Chat
           </Button>
+          <ThemeToggle />
           {status === "loading" ? (
             <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
           ) : session ? (

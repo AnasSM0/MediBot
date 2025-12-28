@@ -5,6 +5,8 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { DisclaimerBanner } from "@/components/layout/disclaimer-banner";
 import { TopNav } from "@/components/layout/top-nav";
+import { OfflineIndicator } from "@/components/layout/OfflineIndicator";
+import { ThemeScript } from "@/components/theme/ThemeProvider";
 import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({
@@ -23,7 +25,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className="bg-background">
       <body className={`${inter.variable} font-sans`}>
+        <ThemeScript />
         <Providers>
+          <OfflineIndicator />
           <div className="flex min-h-screen flex-col">
             <TopNav />
             <main className="flex-1 overflow-hidden">{children}</main>
