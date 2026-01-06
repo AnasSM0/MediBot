@@ -10,48 +10,42 @@ services:
       - "8000:8000"
     networks:
       - medibot-network
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./backend/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build:
       context: ./frontend
       args:
-        # Build-time variable from root .env
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: medibot-frontend
     env_file:
       - ../.env
     ports:
       - "3000:3000"
-    depends_on:
-      - backend
     networks:
       - medibot-network
-    restart: always
-
-  # Local PostgreSQL service - DISABLED (using NeonDB instead)
-  # Uncomment this section if you want to use local PostgreSQL
-  # db:
-  #   image: postgres:15-alpine
-  #   container_name: medibot-db
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   environment:
-  #     - POSTGRES_USER=postgres
-  #     - POSTGRES_PASSWORD=postgres
-  #     - POSTGRES_DB=medibot
-  #   ports:
-  #     - "5432:5432"
-  #   networks:
-  #     - medibot-network
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-  #   restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   postgres_data:
@@ -59,3 +53,5 @@ volumes:
 networks:
   medibot-network:
     driver: bridge
+
+

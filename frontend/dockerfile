@@ -1,22 +1,39 @@
+# ============================================
+# Development Mode Dockerfile
+# ============================================
+# Uses npm run dev instead of building
+# Faster startup, no build errors
+# ============================================
+
 FROM node:20-alpine
 
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json* ./
 
-# Install dependencies
+# Install ALL dependencies (dev mode needs them)
 RUN npm install
 
-# Copy application files
+# Copy application source
 COPY . .
 
-# Set environment variable
-ARG NEXT_PUBLIC_API_URL
+# Set environment variables
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    chown -R nextjs:nodejs /app
+
+# Switch to non-root user
+USER nextjs
 
 # Expose port
 EXPOSE 3000
 
-# Run in development mode
+# Run development server (no build required!)
 CMD ["npm", "run", "dev"]
+

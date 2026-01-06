@@ -1,0 +1,146 @@
+# ============================================
+# Frontend .dockerignore
+# ============================================
+# Excludes files from Docker build context to:
+# 1. Reduce build context size (faster uploads)
+# 2. Prevent sensitive data leakage
+# 3. Avoid unnecessary file copying
+# 4. Improve build cache efficiency
+# ============================================
+
+# ============================================
+# Dependencies (Rebuilt in Docker)
+# ============================================
+# Excluded because: npm ci installs fresh dependencies
+# Size impact: ~200-500 MB saved
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.bak
+
+# ============================================
+# Environment Files (Security Risk)
+# ============================================
+# Excluded because: Contains secrets, should use build args
+# Security impact: Prevents credential leakage
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+!.env.example
+
+# ============================================
+# Build Outputs (Rebuilt in Docker)
+# ============================================
+# Excluded because: Docker builds fresh .next directory
+# Size impact: ~50-200 MB saved
+.next
+out
+build
+dist
+.cache
+
+# ============================================
+# Testing & Coverage
+# ============================================
+# Excluded because: Not needed in production image
+# Size impact: ~10-50 MB saved
+coverage
+.nyc_output
+test-results
+.jest
+
+# ============================================
+# Logs (Should be volumes)
+# ============================================
+# Excluded because: Logs should be mounted as volumes
+# Size impact: Variable (can be GBs)
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================================
+# Git Repository
+# ============================================
+# Excluded because: Not needed in container
+# Size impact: ~5-50 MB saved
+.git
+.gitignore
+.gitattributes
+.github
+
+# ============================================
+# Docker Files (Avoid recursion)
+# ============================================
+# Excluded because: Not needed inside container
+# Size impact: ~1-5 MB saved
+Dockerfile
+dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# ============================================
+# IDE & Editor Files
+# ============================================
+# Excluded because: Development tools not needed
+# Size impact: ~1-10 MB saved
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.editorconfig
+.eslintcache
+
+# ============================================
+# OS Files
+# ============================================
+# Excluded because: OS-specific metadata
+# Size impact: ~1-5 MB saved
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================
+# Documentation
+# ============================================
+# Excluded because: Not needed at runtime
+# Size impact: ~1-10 MB saved
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+!package.json
+docs/
+
+# ============================================
+# TypeScript Build Info
+# ============================================
+# Excluded because: Rebuilt during Docker build
+# Size impact: ~1-5 MB saved
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ============================================
+# Deployment Platforms
+# ============================================
+# Excluded because: Platform-specific configs
+.vercel
+.netlify
+.firebase
+
+# ============================================
+# Miscellaneous
+# ============================================
+# Excluded because: Development/debugging files
+fix-chunk-error.bat
+*.local
+.temp
+tmp/

@@ -1,0 +1,91 @@
+# ============================================
+# BASE IMAGE POLICY
+# ============================================
+# ✅ APPROVED: node:20-alpine, nginx:alpine
+# ❌ REJECTED: ubuntu, node:latest, debian
+# ============================================
+
+# ============================================
+# DEPLOYMENT TYPE: STATIC (nginx)
+# ============================================
+# This Dockerfile is for STATIC EXPORT only
+# Use this if:
+# - No middleware
+# - No API routes
+# - No Server Components
+# - No dynamic rendering
+# - Pure client-side React/Vite app
+#
+# For SSR (Next.js with middleware), use: dockerfile
+# ============================================
+
+# ============================================
+# Stage 1: Dependencies
+# ============================================
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+
+# Install dependencies
+RUN npm ci
+
+# ============================================
+# Stage 2: Builder
+# ============================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy application source
+COPY . .
+
+# Set build-time environment variables
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build static export
+# For Next.js: Requires output: 'export' in next.config.mjs
+# For Vite: npm run build outputs to dist/
+RUN npm run build
+
+# ============================================
+# Stage 3: Runtime (nginx)
+# ============================================
+FROM nginx:alpine AS runner
+
+# Copy custom nginx configuration
+COPY --from=builder /app/nginx.conf /etc/nginx/nginx.conf
+
+# Copy static files from builder
+# For Next.js: out/ directory
+# For Vite: dist/ directory
+COPY --from=builder /app/out /usr/share/nginx/html
+
+# Create non-root user for nginx
+RUN addgroup -g 1001 -S nginx-user && \
+    adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx-user -g nginx-user nginx-user && \
+    chown -R nginx-user:nginx-user /usr/share/nginx/html && \
+    chown -R nginx-user:nginx-user /var/cache/nginx && \
+    chown -R nginx-user:nginx-user /var/log/nginx && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx-user:nginx-user /var/run/nginx.pid
+
+# Switch to non-root user
+USER nginx-user
+
+# Expose port 80 (standard HTTP)
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
+
+# Start nginx in foreground
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,203 @@
+# ============================================
+# Backend .dockerignore
+# ============================================
+# Excludes files from Docker build context to:
+# 1. Reduce build context size (faster uploads)
+# 2. Prevent sensitive data leakage
+# 3. Avoid unnecessary file copying
+# 4. Improve build cache efficiency
+# ============================================
+
+# ============================================
+# Python Cache (Rebuilt in Docker)
+# ============================================
+# Excluded because: Python regenerates bytecode
+# Size impact: ~5-50 MB saved
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+
+# ============================================
+# Virtual Environments (Rebuilt in Docker)
+# ============================================
+# Excluded because: Docker creates its own venv
+# Size impact: ~100-500 MB saved
+venv
+env
+ENV
+.venv
+.virtualenv
+venv.bak
+
+# ============================================
+# Environment Files (Security Risk)
+# ============================================
+# Excluded because: Contains secrets, should use build args
+# Security impact: Prevents credential leakage
+.env
+.env.*
+.env.local
+.env.development
+.env.production
+.env.test
+!.env.example
+
+# ============================================
+# Testing Files & Coverage
+# ============================================
+# Excluded because: Not needed in production image
+# Size impact: ~10-100 MB saved
+tests/
+test/
+*_test.py
+test_*.py
+.pytest_cache
+.coverage
+htmlcov
+*.cover
+.hypothesis
+.tox
+nosetests.xml
+coverage.xml
+
+# ============================================
+# Documentation
+# ============================================
+# Excluded because: Not needed at runtime
+# Size impact: ~1-20 MB saved
+docs/
+doc/
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+API_USAGE_GUIDE.md
+*.rst
+
+# ============================================
+# Development/Debug Files
+# ============================================
+# Excluded because: Only needed during development
+# Size impact: ~5-20 MB saved
+query_sessions.py
+list_models.py
+_local_rule_based_new.py
+debug.py
+scratch.py
+playground.py
+
+# ============================================
+# Data & Logs (Should be volumes)
+# ============================================
+# Excluded because: Should be mounted as volumes
+# Size impact: Variable (can be GBs)
+DataSets/
+datasets/
+data/
+logs/
+*.log
+*.log.*
+
+# ============================================
+# Git Repository
+# ============================================
+# Excluded because: Not needed in container
+# Size impact: ~5-50 MB saved
+.git
+.gitignore
+.gitattributes
+.github
+
+# ============================================
+# Docker Files (Avoid recursion)
+# ============================================
+# Excluded because: Not needed inside container
+# Size impact: ~1-5 MB saved
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+# ============================================
+# IDE & Editor Files
+# ============================================
+# Excluded because: Development tools not needed
+# Size impact: ~1-10 MB saved
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.editorconfig
+.pylintrc
+.flake8
+.mypy_cache
+.dmypy.json
+dmypy.json
+
+# ============================================
+# OS Files
+# ============================================
+# Excluded because: OS-specific metadata
+# Size impact: ~1-5 MB saved
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================
+# Database Files (Should be volumes)
+# ============================================
+# Excluded because: Should be mounted or use external DB
+# Size impact: Variable (can be GBs)
+*.db
+*.sqlite
+*.sqlite3
+db.sqlite3
+
+# ============================================
+# Temporary Files
+# ============================================
+# Excluded because: Temporary/backup files
+# Size impact: ~1-10 MB saved
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+.temp
+tmp/
+temp/
+
+# ============================================
+# Build Artifacts
+# ============================================
+# Excluded because: Generated during build
+# Size impact: ~5-20 MB saved
+build/
+dist/
+*.egg-info
+.eggs
+*.egg
+
+# ============================================
+# CI/CD Files
+# ============================================
+# Excluded because: Not needed in container
+.travis.yml
+.gitlab-ci.yml
+.circleci
+Jenkinsfile
+
+# ============================================
+# Miscellaneous
+# ============================================
+# Excluded because: Not needed in production
+*.pid
+*.seed
+*.pid.lock
+.ipynb_checkpoints

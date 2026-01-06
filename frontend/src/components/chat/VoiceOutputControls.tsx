@@ -47,6 +47,7 @@ export type VoiceOutputControlsProps = {
  * ```
  */
 export function VoiceOutputControls({ enabled, onToggle, className }: VoiceOutputControlsProps) {
+  const [isMounted, setIsMounted] = useState(false);
   const {
     isSpeaking,
     isPaused,
@@ -61,8 +62,13 @@ export function VoiceOutputControls({ enabled, onToggle, className }: VoiceOutpu
 
   const [isOpen, setIsOpen] = useState(false);
 
-  // Don't render if not supported
-  if (!isSupported) {
+  // Only render on client-side to prevent hydration errors
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Don't render during SSR or if not supported
+  if (!isMounted || !isSupported) {
     return null;
   }
 
