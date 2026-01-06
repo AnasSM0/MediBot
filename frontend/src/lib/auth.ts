@@ -1,6 +1,10 @@
 import type { NextAuthConfig } from "next-auth";
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+
+if (typeof window !== "undefined") {
+  throw new Error("This module must not be imported in the browser");
+}
 import EmailProvider from "next-auth/providers/email";
 import { Pool } from "pg";
 import PostgresAdapter from "@auth/pg-adapter";
@@ -19,50 +23,59 @@ if (connectionString?.includes('postgresql+asyncpg://')) {
   connectionString = connectionString.replace('postgresql+asyncpg://', 'postgresql://');
 }
 
-if (!connectionString) {
-  console.warn("DATABASE_URL is not set. NextAuth adapter will fail without it.");
-}
+// Only initialize pool if DATABASE_URL is provided to prevent connection errors
+const pool = connectionString 
+  ? (global.__mediBotPool ?? new Pool({
+      connectionString,
+      ssl: connectionString?.includes('neon.tech') || process.env.NODE_ENV === "production" 
+        ? { rejectUnauthorized: false } 
+        : undefined,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    }))
+  : undefined;
 
-const pool =
-  global.__mediBotPool ??
-  new Pool({
-    connectionString,
-    ssl: connectionString?.includes('neon.tech') || process.env.NODE_ENV === "production" 
-      ? { rejectUnauthorized: false } 
-      : undefined,
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
-
-// Handle pool errors to prevent crashes
-pool.on('error', (err: Error) => {
+// Handle pool errors only if pool exists
+pool?.on('error', (err: Error) => {
   console.error('Unexpected database pool error:', err);
 });
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production" && pool) {
   global.__mediBotPool = pool;
 }
 
 const emailServer = process.env.EMAIL_SERVER?.trim();
 const emailFrom = process.env.EMAIL_FROM?.trim();
 const emailEnabled = Boolean(emailServer && emailFrom && /^smtps?:\/\//i.test(emailServer));
-const transporter = emailEnabled ? nodemailer.createTransport(emailServer as string) : null;
+const transporter = emailEnabled && emailServer ? nodemailer.createTransport(emailServer) : null;
 
 async function signAccessToken(payload: Record<string, unknown>) {
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) throw new Error("NEXTAUTH_SECRET is not configured");
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("12h")
-    .sign(new TextEncoder().encode(secret));
+  try {
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) {
+      console.error("NEXTAUTH_SECRET is not configured");
+      throw new Error("NEXTAUTH_SECRET is not configured");
+    }
+    return await new SignJWT(payload)
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("12h")
+      .sign(new TextEncoder().encode(secret));
+  } catch (error) {
+    console.error("Error signing access token:", error);
+    return null;
+  }
 }
 
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "development-secret-key";
+
 export const authConfig = {
-  adapter: PostgresAdapter(pool),
+  secret: AUTH_SECRET,
+  trustHost: true,
+//   adapter: PostgresAdapter(pool),
   session: {
-    strategy: "database",
+    strategy: "jwt",
   },
   pages: {
     signIn: "/signin",
@@ -70,8 +83,16 @@ export const authConfig = {
   },
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      clientId: (() => {
+        const id = process.env.GOOGLE_CLIENT_ID;
+        console.log("GOOGLE_CLIENT_ID present:", !!id);
+        return id ?? "";
+      })(),
+      clientSecret: (() => {
+        const secret = process.env.GOOGLE_CLIENT_SECRET;
+        console.log("GOOGLE_CLIENT_SECRET present:", !!secret);
+        return secret ?? "";
+      })(),
     }),
     ...(emailEnabled
       ? [
@@ -128,7 +149,7 @@ export const authConfig = {
     async signIn({ user, account }) {
       if (!user?.email) return false;
       try {
-        await pool.query("UPDATE users SET provider = $1 WHERE id = $2", [account?.provider ?? "email", user.id]);
+        // await pool.query("UPDATE users SET provider = $1 WHERE id = $2", [account?.provider ?? "email", user.id]);
       } catch (error) {
         console.error("Failed to update provider", error);
       }

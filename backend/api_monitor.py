@@ -45,8 +45,13 @@ def log_api_call(
     }
     
     # Append to JSONL file
-    with open(API_USAGE_LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps(log_entry) + "\n")
+    try:
+        with open(API_USAGE_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        # Silent fail or print to stderr to avoid breaking main flow
+        import sys
+        print(f"Warning: Failed to log API usage to {API_USAGE_LOG}: {e}", file=sys.stderr)
 
 def get_usage_stats(hours: int = 24) -> dict:
     """

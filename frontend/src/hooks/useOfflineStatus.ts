@@ -50,14 +50,20 @@ export type UseOfflineStatusReturn = {
 export function useOfflineStatus(options: UseOfflineStatusOptions = {}): UseOfflineStatusReturn {
   const { enableServiceWorker = true, onOfflineReady, onUpdateAvailable } = options;
 
-  const [isOffline, setIsOffline] = useState(() => checkIsOffline());
+  // Initialize as false to match server-side rendering
+  // We'll update it in useEffect to avoid hydration mismatches
+  const [isOffline, setIsOffline] = useState(false);
   const [serviceWorkerStatus, setServiceWorkerStatus] = useState<ServiceWorkerStatus | null>(null);
-  const [serviceWorkerSupported] = useState(() => isServiceWorkerSupported());
+  const [serviceWorkerSupported, setServiceWorkerSupported] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
 
   // Listen for online/offline events
   useEffect(() => {
+    // Initial checks on mount
+    setIsOffline(checkIsOffline());
+    setServiceWorkerSupported(isServiceWorkerSupported());
+
     const cleanup = addOnlineListener((online) => {
       setIsOffline(!online);
     });

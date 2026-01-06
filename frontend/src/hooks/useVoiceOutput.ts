@@ -63,9 +63,13 @@ export function useVoiceOutput(options: UseVoiceOutputOptions = {}): UseVoiceOut
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSupported] = useState(() => isSpeechSynthesisSupported());
+  const [isSupported, setIsSupported] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+
+  useEffect(() => {
+    setIsSupported(isSpeechSynthesisSupported());
+  }, []);
 
   const managerRef = useRef<SpeechSynthesisManager | null>(null);
   const configRef = useRef<SpeechSynthesisConfig>({

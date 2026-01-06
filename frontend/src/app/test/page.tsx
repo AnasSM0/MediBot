@@ -1,3 +1,4 @@
+"use client";
 import { ChatScreen } from "@/app/chat/ChatScreen";
 
 export default function TestPage() {

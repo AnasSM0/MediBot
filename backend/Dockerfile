@@ -97,6 +97,8 @@ COPY --chown=appuser:appuser routes/ ./routes/
 COPY --chown=appuser:appuser services/ ./services/
 COPY --chown=appuser:appuser utils/ ./utils/
 COPY --chown=appuser:appuser alembic/ ./alembic/
+COPY --chown=appuser:appuser evaluation/ ./evaluation/
+COPY --chown=appuser:appuser run_eval.py .
 
 # Create logs directory with proper permissions
 RUN mkdir -p /app/logs && \

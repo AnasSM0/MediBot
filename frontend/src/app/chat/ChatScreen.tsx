@@ -6,12 +6,17 @@ import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
 
+import dynamic from "next/dynamic";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
-import { VoiceOutputControls } from "@/components/chat/VoiceOutputControls";
 import { Card } from "@/components/ui/card";
+
+const VoiceOutputControls = dynamic(
+  () => import("@/components/chat/VoiceOutputControls").then((mod) => mod.VoiceOutputControls),
+  { ssr: false }
+);
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/use-toast";
 import { fetchHistory, fetchSession, streamChat } from "@/lib/api";

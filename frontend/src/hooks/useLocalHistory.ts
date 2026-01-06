@@ -75,12 +75,16 @@ export function useLocalHistory(options: UseLocalHistoryOptions = {}): UseLocalH
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSupported] = useState(() => isIndexedDBSupported());
+  const [isSupported, setIsSupported] = useState(false);
   const [storageStats, setStorageStats] = useState<{
     sessions: number;
     messages: number;
     estimatedSize: string;
   } | null>(null);
+
+  useEffect(() => {
+    setIsSupported(isIndexedDBSupported());
+  }, []);
 
   /**
    * Load all sessions

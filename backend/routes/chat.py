@@ -83,9 +83,22 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency, db: AsyncSession
     assistant_message_id = ""
     final_severity = "mild"
 
+    # Fetch recent history for context
+    # Exclude the current user_message we just saved (to avoid duplication if we pass it explicitly)
+    history_result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session_id)
+        .where(Message.id != user_message.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history_items = history_result.scalars().all()
+    # Convert to list of dicts in chronological order
+    history = [{"role": msg.role, "content": msg.content} for msg in reversed(history_items)]
+
     async def generator():
         nonlocal assistant_message_id, final_severity
-        async for chunk in stream_response(message_text):
+        async for chunk in stream_response(message_text, history):
             collected.append(chunk)
             yield {"type": "chunk", "content": chunk}
         full_text = "".join(collected).strip()
@@ -166,16 +179,22 @@ async def chat_image(
     if not chat_session.title:
         chat_session.title = (user_text[:60] + "…") if len(user_text) > 60 else user_text
 
-    # Save user message (We save the augmented one so context is preserved for history)
-    # Or we could save the original and a system message. 
-    # For simplicity and effectiveness in RAG/History, saving the augmented one is better for the LLM context in future turns.
-    # However, for UI it might look ugly. 
-    # Let's save the augmented message but maybe we can clean it up in UI if needed.
-    # Actually, let's just save it. The user will see "Image Analysis & OCR: ..." which is actually helpful transparency.
+    # Save user message (augmented)
     user_message_entry = Message(session_id=session_id, role="user", content=augmented_message)
     db.add(user_message_entry)
     await db.flush()
     await db.commit()
+
+    # Fetch history for context
+    history_result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session_id)
+        .where(Message.id != user_message_entry.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history_items = history_result.scalars().all()
+    history = [{"role": msg.role, "content": msg.content} for msg in reversed(history_items)]
 
     # Stream assistant response
     async def done_payload():
@@ -194,9 +213,8 @@ async def chat_image(
     async def generator():
         nonlocal assistant_message_id, final_severity
         # We stream response based on the augmented message
-        # Log that we're using reasoning on image data
         log_api_call("openrouter", "/chat/image", "reasoning", success=True, metadata={"has_image_context": True})
-        async for chunk in stream_response(augmented_message):
+        async for chunk in stream_response(augmented_message, history):
             collected.append(chunk)
             yield {"type": "chunk", "content": chunk}
         full_text = "".join(collected).strip()

@@ -1,13 +1,8 @@
-/**
- * Voice Input Button Component
- * 
- * Push-to-talk button with visual feedback for voice input state.
- * Displays live transcription and handles errors gracefully.
- */
+
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,24 +14,8 @@ export type VoiceInputButtonProps = {
   className?: string;
 };
 
-/**
- * Voice Input Button with push-to-talk functionality
- * 
- * Features:
- * - Push to start, auto-stops on silence
- * - Live transcription feedback
- * - Visual state indicators
- * - Error handling with user feedback
- * 
- * @example
- * ```tsx
- * <VoiceInputButton 
- *   onTranscript={(text) => setMessage(text)}
- *   disabled={isSending}
- * />
- * ```
- */
 export function VoiceInputButton({ onTranscript, disabled, className }: VoiceInputButtonProps) {
+  const [isMounted, setIsMounted] = useState(false);
   const {
     isListening,
     isSupported,
@@ -56,6 +35,11 @@ export function VoiceInputButton({ onTranscript, disabled, className }: VoiceInp
     },
   });
 
+  // Only enable on client-side
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Update parent component with live transcript
   useEffect(() => {
     const currentText = transcript || interimTranscript;
@@ -73,13 +57,15 @@ export function VoiceInputButton({ onTranscript, disabled, className }: VoiceInp
     }
   };
 
-  // Don't render if not supported
-  if (!isSupported) {
-    return null;
-  }
+  // Don't render content if not supported or not mounted
+  // But always render the wrapper to prevent hydration errors
+ if (!isMounted || !isSupported) {
+  return null;
+}
+
 
   return (
-    <div className="relative">
+    <div className={cn("relative", className)}>
       <Button
         type="button"
         size="icon"

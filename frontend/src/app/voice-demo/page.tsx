@@ -7,17 +7,26 @@
 
 "use client";
 
-import { useState } from "react";
-import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
+import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { isSpeechRecognitionSupported } from "@/lib/speech";
 
+const VoiceInputButton = dynamic(
+  () => import("@/components/chat/VoiceInputButton").then((mod) => mod.VoiceInputButton),
+  { ssr: false }
+);
+
 export default function VoiceDemoPage() {
   const [transcript, setTranscript] = useState("");
   const [history, setHistory] = useState<string[]>([]);
-  const isSupported = isSpeechRecognitionSupported();
+  const [isSupported, setIsSupported] = useState(false);
+
+  useEffect(() => {
+    setIsSupported(isSpeechRecognitionSupported());
+  }, []);
 
   const handleTranscript = (text: string) => {
     setTranscript(text);

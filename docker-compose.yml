@@ -12,7 +12,7 @@ services:
       - medibot-network
     restart: unless-stopped
     volumes:
-      - ./backend/logs:/app/logs
+      - backend_logs:/app/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()"]
       interval: 30s
@@ -27,7 +27,14 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: medibot-frontend
     env_file:
-      - ../.env
+      - .env
+    environment:
+      - WATCHPACK_POLLING=true
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - AUTH_SECRET=${AUTH_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - NEXTAUTH_URL=http://localhost:3000
     ports:
       - "3000:3000"
     networks:
@@ -35,6 +42,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    command: sh -c "npm install && npm run dev"
     restart: unless-stopped
     volumes:
       - ./frontend:/app
@@ -49,6 +57,7 @@ services:
 
 volumes:
   postgres_data:
+  backend_logs:
 
 networks:
   medibot-network:

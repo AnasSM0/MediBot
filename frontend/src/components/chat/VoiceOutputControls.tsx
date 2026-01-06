@@ -1,9 +1,4 @@
-/**
- * Voice Output Controls Component
- * 
- * UI component for controlling text-to-speech output.
- * Features toggle on/off, voice selection, and playback controls.
- */
+
 
 "use client";
 
@@ -62,14 +57,15 @@ export function VoiceOutputControls({ enabled, onToggle, className }: VoiceOutpu
 
   const [isOpen, setIsOpen] = useState(false);
 
-  // Only render on client-side to prevent hydration errors
+  // Only render content on client-side
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Don't render during SSR or if not supported
+  // Always render the wrapper div to match server HTML structure
+  // But only show controls if supported and mounted
   if (!isMounted || !isSupported) {
-    return null;
+    return <div className={cn("flex items-center gap-2", className)} />;
   }
 
   const handleToggle = () => {
@@ -220,3 +216,4 @@ export function VoiceOutputControls({ enabled, onToggle, className }: VoiceOutpu
     </div>
   );
 }
+

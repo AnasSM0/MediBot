@@ -30,6 +30,7 @@ class ChatSession(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=uuid_pk)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=func.now())
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now())
 

@@ -19,6 +19,9 @@ const nextConfig = {
     }
     return config;
   },
+  
+  // Disable compression in dev mode to prevent chunk loading errors
+  compress: false,
 };
 
 export default nextConfig;

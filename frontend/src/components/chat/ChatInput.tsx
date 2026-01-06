@@ -3,9 +3,14 @@
 import { FormEvent, KeyboardEvent, useRef, useState, ChangeEvent } from "react";
 import { SendHorizonal, Paperclip, X } from "lucide-react";
 
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { cn } from "@/lib/utils";
+
+const VoiceInputButton = dynamic(
+  () => import("@/components/chat/VoiceInputButton").then((mod) => mod.VoiceInputButton),
+  { ssr: false }
+);
 
 type ChatInputProps = {
   placeholder?: string;

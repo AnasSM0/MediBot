@@ -120,14 +120,28 @@ def _build_prompt(user_message: str) -> str:
 # 🔹 Gemini Streaming
 # ==========================================
 
-async def _stream_gemini(user_message: str) -> AsyncGenerator[str, None]:
+async def _stream_gemini(user_message: str, history: list[dict] = []) -> AsyncGenerator[str, None]:
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        # Use gemini-1.5-flash (better rate limits)
         model = genai.GenerativeModel(model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
 
-        stream = model.generate_content(_build_prompt(user_message), stream=True)
+        # Format history for Gemini (stateless mode usually, or explicit chat inputs)
+        # We will concatenate for simplicity since we use generate_content
+        context_str = ""
+        for msg in history:
+            role = "User" if msg["role"] == "user" else "Model"
+            context_str += f"{role}: {msg['content']}\n"
+        
+        full_prompt = (
+            f"{_build_prompt(user_message)}\n"
+            f"### Conversation History:\n{context_str}\n" 
+            f"### Current User Input:\n{user_message}"
+        )
+        # Note: _build_prompt includes instructions and dataset context. 
+        # Ideally we refactor _build_prompt, but appending works for now.
+
+        stream = model.generate_content(full_prompt, stream=True)
         log_api_call("gemini", "/chat", "text", success=True, metadata={"model": os.getenv("GEMINI_MODEL", "gemini-1.5-flash")})
         for chunk in stream:
             if hasattr(chunk, "text") and chunk.text:
@@ -136,14 +150,13 @@ async def _stream_gemini(user_message: str) -> AsyncGenerator[str, None]:
     except Exception as e:
         print(f"❌ Gemini Error: {e}")
         log_api_call("gemini", "/chat", "text", success=False, error=str(e))
-        # Don't fallback here - let the caller handle it
         yield f"Error: Unable to process request with Gemini. {str(e)}"
 
 # ==========================================
 # 🔹 OpenRouter Streaming
 # ==========================================
 
-async def _stream_openrouter(user_message: str) -> AsyncGenerator[str, None]:
+async def _stream_openrouter(user_message: str, history: list[dict] = []) -> AsyncGenerator[str, None]:
     if not OPENROUTER_API_KEY:
         async for c in _local_rule_based(user_message):
             yield c
@@ -153,12 +166,33 @@ async def _stream_openrouter(user_message: str) -> AsyncGenerator[str, None]:
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
+    
+    # Analyze symptoms for the current message
+    dataset_context = _match_symptoms(user_message)
+    
+    # Build System Prompt
+    system_prompt = (
+        "You are MediBot, an empathetic medical triage assistant.\n"
+        "Follow these instructions:\n"
+        "1. Prioritize patient safety. Identify urgent symptoms immediately.\n"
+        "2. Provide home care advice for mild conditions.\n"
+        "3. Disclaimer: Not a doctor. Verify with a professional.\n"
+        f"{SYSTEM_DISCLAIMER}"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add History
+    # Ensure alternate user/assistant roles if possible, but OpenRouter handles it reasonably well
+    messages.extend(history)
+    
+    # Add Current Message with Context
+    final_user_content = f"{user_message}\n\n{dataset_context if dataset_context else ''}"
+    messages.append({"role": "user", "content": final_user_content})
+
     body = {
         "model": os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-nano-12b-v2-vl:free"),
-        "messages": [
-            {"role": "system", "content": "You are MediBot, an empathetic medical triage assistant."},
-            {"role": "user", "content": _build_prompt(user_message)},
-        ],
+        "messages": messages,
         "stream": True,
     }
 
@@ -182,13 +216,13 @@ async def _stream_openrouter(user_message: str) -> AsyncGenerator[str, None]:
                         continue
     except Exception as e:
         log_api_call("openrouter", "/chat", "text", success=False, error=str(e))
-        raise
+        yield f"Error: Unable to process request with OpenRouter. {str(e)}"
 
 # ==========================================
 # 🔹 Local Rule-Based Fallback
 # ==========================================
 
-async def _local_rule_based(user_message: str) -> AsyncGenerator[str, None]:
+async def _local_rule_based(user_message: str, history: list[dict] = []) -> AsyncGenerator[str, None]:
     log_api_call("local", "/chat", "text", success=True, metadata={"fallback": True})
     
     # Detect greetings and identity questions
@@ -230,20 +264,20 @@ async def _local_rule_based(user_message: str) -> AsyncGenerator[str, None]:
 # 🔹 Entry Point
 # ==========================================
 
-async def stream_response(user_message: str) -> AsyncGenerator[str, None]:
+async def stream_response(user_message: str, history: list[dict] = []) -> AsyncGenerator[str, None]:
     # Prefer OpenRouter for text reasoning to conserve Gemini API requests
     # Gemini should primarily be used only for vision tasks (in vision.py)
     if OPENROUTER_API_KEY:
-        async for chunk in _stream_openrouter(user_message):
+        async for chunk in _stream_openrouter(user_message, history):
             yield chunk
         return
     # Fallback to Gemini only if OpenRouter is unavailable
     if GEMINI_API_KEY:
-        async for chunk in _stream_gemini(user_message):
+        async for chunk in _stream_gemini(user_message, history):
             yield chunk
         return
     # Last resort: local rule-based system
-    async for chunk in _local_rule_based(user_message):
+    async for chunk in _local_rule_based(user_message, history):
         yield chunk
 
 def detect_severity(user_message: str, assistant_text: Optional[str] = None) -> str:

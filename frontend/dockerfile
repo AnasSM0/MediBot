@@ -24,12 +24,12 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs && \
-    chown -R nextjs:nodejs /app
+# RUN addgroup --system --gid 1001 nodejs && \
+#     adduser --system --uid 1001 nextjs && \
+#     chown -R nextjs:nodejs /app
 
 # Switch to non-root user
-USER nextjs
+# USER nextjs
 
 # Expose port
 EXPOSE 3000
