@@ -26,6 +26,7 @@ router = APIRouter()
 class ChatBody(BaseModel):
     message: str
     session_id: Optional[str] = None
+    mode: Optional[str] = "normal"
 
 
 @router.post("/chat")
@@ -34,8 +35,13 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency, db: AsyncSession
     message_text = body.message.strip()
     if not message_text:
         raise HTTPException(status_code=400, detail="Message is required")
+        
+    valid_modes = ["normal", "doctor", "deep_research"]
+    current_mode = body.mode or "normal"
+    if current_mode not in valid_modes:
+        raise HTTPException(status_code=400, detail=f"Invalid mode. Must be one of: {', '.join(valid_modes)}")
 
-    # Ensure user exists in local DB (NextAuth owns canonical users; we mirror minimal info)
+    # Ensure user exists in local DB
     user: Optional[User] = None
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
@@ -52,8 +58,14 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency, db: AsyncSession
         chat_session = session_result.scalar_one_or_none()
         if not chat_session:
             raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Update mode if changed
+        if chat_session.mode != current_mode:
+            chat_session.mode = current_mode
+            db.add(chat_session)
+            await db.flush()
     else:
-        chat_session = ChatSession(user_id=user_id)
+        chat_session = ChatSession(user_id=user_id, mode=current_mode)
         db.add(chat_session)
         await db.flush()
         session_id = chat_session.id
@@ -68,23 +80,72 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency, db: AsyncSession
     await db.flush()
     await db.commit()
 
-    # Stream assistant response and persist at the end
-    async def done_payload():
-        # The outer scope will mutate these after streaming ends
+    # RAG Pipeline Execution
+    import rag
+    from services.ai import stream_llm_direct
+    from services.cache import get_cache
+    import os
+    import json
+
+    cache = get_cache()
+    cached_response = cache.check(message_text)
+
+    async def done_payload(msg_id, sev, create_session=False):
         return {
             "type": "done",
             "session_id": session_id,
-            "message_id": assistant_message_id or "",
-            "severity": final_severity or "mild",
-            "requires_attention": final_severity == "severe",
+            "message_id": msg_id,
+            "severity": sev,
+            "requires_attention": sev == "severe",
         }
+
+    if cached_response and current_mode == "normal": # Only cache normal mode for safety? Or all? User said "threshold 0.90 for medical accuracy". I will use for all but maybe doctor mode requires fresh? I'll use for all.
+        # Persist cached response to DB
+        final_severity = detect_severity(message_text, cached_response)
+        assistant = Message(session_id=session_id, role="assistant", content=cached_response)
+        db.add(assistant)
+        await db.flush()
+        await db.commit()
+        
+        async def cached_gen():
+            yield {"type": "chunk", "content": cached_response}
+            yield await done_payload(assistant.id, final_severity)
+
+        async def sse_cached():
+            async for event in cached_gen():
+                from utils.sse import format_sse
+                yield format_sse(event)
+                
+        return StreamingResponse(sse_cached(), media_type="text/event-stream")
+
+    # 1. Retrieve
+    # ... existing RAG logic ...
+    k = 5
+    if current_mode == "deep_research":
+        k = 12
+    chunks = rag.retrieve(message_text, k=k)
+
+    # 2. Build Prompt
+    prompt_data = rag.build_prompt(message_text, chunks, mode=current_mode)
+    final_prompt = prompt_data["prompt"]
+
+    # 3. Debug Inspection
+    debug_info = None
+    if os.getenv("DEBUG_RAG") == "true":
+        debug_info = rag.inspect(final_prompt, chunks)
+        global _last_debug_info
+        _last_debug_info = {
+            "mode": current_mode,
+            "last_prompt": final_prompt,
+            "retrieved_chunks": debug_info["chunks"]
+        }
+        print(f"RAG_DEBUG: Prompt built ({len(final_prompt)} chars).")
 
     collected = []
     assistant_message_id = ""
     final_severity = "mild"
 
     # Fetch recent history for context
-    # Exclude the current user_message we just saved (to avoid duplication if we pass it explicitly)
     history_result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
@@ -93,36 +154,49 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency, db: AsyncSession
         .limit(10)
     )
     history_items = history_result.scalars().all()
-    # Convert to list of dicts in chronological order
     history = [{"role": msg.role, "content": msg.content} for msg in reversed(history_items)]
 
     async def generator():
         nonlocal assistant_message_id, final_severity
-        async for chunk in stream_response(message_text, history):
+        
+        if debug_info:
+            yield {"type": "debug", "content": json.dumps(debug_info)}
+
+        async for chunk in stream_llm_direct(final_prompt, history, mode=current_mode):
             collected.append(chunk)
             yield {"type": "chunk", "content": chunk}
+            
         full_text = "".join(collected).strip()
         final_severity = detect_severity(message_text, full_text)
+        
+        # Store in Cache
+        if full_text:
+             cache.store(message_text, full_text)
+
         assistant = Message(session_id=session_id, role="assistant", content=full_text)
         db.add(assistant)
         await db.flush()
         assistant_message_id = assistant.id
         await db.commit()
-        yield {
-            "type": "done",
-            "session_id": session_id,
-            "message_id": assistant_message_id,
-            "severity": final_severity,
-            "requires_attention": final_severity == "severe",
-        }
+        yield await done_payload(assistant_message_id, final_severity)
 
     async def sse_stream():
         async for event in generator():
             from utils.sse import format_sse
-
-            yield format_sse(event)  # type: ignore[arg-type]
+            yield format_sse(event)
 
     return StreamingResponse(sse_stream(), media_type="text/event-stream")
+
+# Global storage for debug endpoint
+_last_debug_info = {}
+
+@router.get("/debug/rag")
+async def debug_rag():
+    import os
+    if os.getenv("DEBUG_RAG") != "true":
+         raise HTTPException(status_code=403, detail="RAG debugging disabled")
+    return _last_debug_info
+
 
 
 from fastapi import UploadFile, File, Form
@@ -143,7 +217,7 @@ async def chat_image(
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, and WebP are supported.")
     
     # 1. Analyze Image
-    image_context = await analyze_image(file)
+    image_context = await analyze_image(file, message or "")
     
     # 2. Construct Augmented Message
     user_text = message.strip() if message else "Analyze this image."

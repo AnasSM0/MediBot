@@ -12,6 +12,7 @@ services:
       - medibot-network
     restart: unless-stopped
     volumes:
+      - ./backend:/app
       - backend_logs:/app/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()"]

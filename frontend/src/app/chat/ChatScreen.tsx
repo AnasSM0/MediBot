@@ -4,25 +4,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
+import { Loader2, Activity, Stethoscope, FileText, AlertCircle } from "lucide-react";
 
-import dynamic from "next/dynamic";
+
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { Sidebar } from "@/components/chat/Sidebar";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
-const VoiceOutputControls = dynamic(
-  () => import("@/components/chat/VoiceOutputControls").then((mod) => mod.VoiceOutputControls),
-  { ssr: false }
-);
+
+import { VoiceOutputControls } from "@/components/chat/VoiceOutputControls";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/use-toast";
-import { fetchHistory, fetchSession, streamChat } from "@/lib/api";
+import { fetchHistory, fetchSession, streamChat, deleteSession } from "@/lib/api";
 import { useVoiceOutput } from "@/hooks/useVoiceOutput";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
+import { RAGInspector } from "@/components/chat/RAGInspector";
 
 type Message = {
   id: string;
@@ -52,6 +52,9 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+  const [mode, setMode] = useState<"normal" | "doctor" | "deep_research">("normal");
+  const [ragDebugInfo, setRagDebugInfo] = useState<any>(null);
+  
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -94,6 +97,8 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
     if (newChat === "true") {
       setActiveSessionId(null);
       setMessages([]);
+      setMode("normal"); // Reset mode for new chat
+      setRagDebugInfo(null);
       router.replace("/chat");
     }
   }, [router, searchParams]);
@@ -113,6 +118,10 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
             createdAt: message.created_at,
           })),
         );
+        // Set mode if present in session data
+        if (sessionData.mode) {
+           setMode(sessionData.mode as any);
+        }
       } catch (error) {
         console.error(error);
         toast({
@@ -137,7 +146,7 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
         title: "Please sign in",
         description: "You need to sign in before chatting with MediBot.",
         variant: "destructive",
-      });
+        });
       return;
     }
 
@@ -159,7 +168,8 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
     if (isSpeaking) {
       cancelSpeech();
     }
-
+    
+    setRagDebugInfo(null);
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setIsStreaming(true);
 
@@ -168,6 +178,7 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
       message: content,
       image,
       sessionId: activeSessionId ?? undefined,
+      mode: mode,
       onChunk: (chunk) => {
         setMessages((prev) =>
           prev.map((message) =>
@@ -217,6 +228,9 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
           });
         }
       },
+      onDebug: (info) => {
+          setRagDebugInfo(info);
+      },
       onError: (error) => {
         console.error(error);
         setIsStreaming(false);
@@ -247,33 +261,48 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
   const handleNewChat = () => {
     setActiveSessionId(null);
     setMessages([]);
+    setMode("normal");
+    setRagDebugInfo(null);
   };
 
-  // Keyboard shortcut handlers
+  const handleDeleteSession = async (id: string) => {
+    if (!accessToken) return;
+    try {
+        await deleteSession(accessToken, id);
+        // Remove from list
+        setHistory((prev) => prev.filter((s) => s.id !== id));
+        toast({ title: "Deleted", description: "Conversation deleted." });
+        
+        // If we deleted the active chat, clear view
+        if (activeSessionId === id) {
+            handleNewChat();
+        }
+    } catch (error) {
+        console.error(error);
+        toast({
+            title: "Error",
+            description: "Failed to delete chat.",
+            variant: "destructive",
+        });
+    }
+  };
+
+  // Keyboard shortcut handlers (unchanged)
   useEffect(() => {
-    // Clear chat (Ctrl+K)
     registerHandler('clear-chat', () => {
       if (messages.length > 0) {
         handleNewChat();
-        toast({
-          title: "Chat cleared",
-          description: "Started a new conversation.",
-        });
+        toast({ title: "Chat cleared", description: "Started a new conversation." });
       }
     });
 
-    // Stop voice (Esc)
     registerHandler('stop-voice', () => {
       if (isSpeaking) {
         cancelSpeech();
-        toast({
-          title: "Speech stopped",
-          description: "Voice output has been stopped.",
-        });
+        toast({ title: "Speech stopped", description: "Voice output has been stopped." });
       }
     });
 
-    // Toggle voice output (Ctrl+M)
     registerHandler('toggle-voice-output', () => {
       setVoiceOutputEnabled((prev) => !prev);
       toast({
@@ -284,21 +313,15 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
       });
     });
 
-    // New session (Ctrl+N)
     registerHandler('new-session', () => {
       handleNewChat();
-      toast({
-        title: "New session",
-        description: "Started a new chat session.",
-      });
+      toast({ title: "New session", description: "Started a new chat session." });
     });
 
-    // Focus input (/)
     registerHandler('focus-input', () => {
       inputRef.current?.focus();
     });
 
-    // Open settings (Ctrl+,)
     registerHandler('open-settings', () => {
       router.push('/settings');
     });
@@ -337,74 +360,91 @@ export function ChatScreen({ initialSessionId }: ChatScreenProps) {
   );
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-140px)] flex-1 overflow-hidden">
+    <div className="flex h-screen w-full overflow-hidden bg-[#212121] text-gray-100 font-sans">
       <Sidebar
         sessions={formattedHistory}
         onSelect={handleSelectSession}
         onNew={handleNewChat}
+        onDelete={handleDeleteSession}
         activeId={activeSessionId ?? undefined}
         isAuthenticated={isAuthenticated}
       />
 
-      <div className="flex flex-1 flex-col">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6">
-          <Card className="bg-[#1E1E1E]/90 px-6 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <h1 className="text-2xl font-semibold text-foreground">Describe how you’re feeling today</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Share your symptoms, recent changes, and any medications. MediBot will provide gentle guidance, home
-                  remedies, and over-the-counter options when appropriate.
-                </p>
-              </div>
-              <VoiceOutputControls
-                enabled={voiceOutputEnabled}
-                onToggle={setVoiceOutputEnabled}
-              />
+      <div className="flex flex-1 flex-col relative h-full">
+        {/* Header / Top Bar */}
+        <header className="sticky top-0 z-10 flex w-full items-center justify-end p-3 text-sm text-gray-400 bg-[#212121]/80 backdrop-blur-sm">
+             <div className="flex items-center gap-4">
+                 <VoiceOutputControls
+                    enabled={voiceOutputEnabled}
+                    onToggle={setVoiceOutputEnabled}
+                 />
+             </div>
+        </header>
+
+        {/* Main Scroll Area */}
+        <div className="flex-1 overflow-y-auto w-full">
+            <div className="flex min-h-full flex-col items-center pb-32 pt-10">
+                <div className="w-full max-w-3xl px-4 flex-1 flex flex-col gap-6">
+                    <RAGInspector data={ragDebugInfo} />
+                    
+                    {status === "loading" ? (
+                      <div className="flex h-40 items-center justify-center text-muted-foreground">
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      </div>
+                    ) : messages.length === 0 ? (
+                       <div className="flex flex-1 flex-col items-center justify-center opacity-80 mt-[20vh]">
+                           <div className="bg-white/10 p-3 rounded-full mb-4">
+                               <Activity className="h-6 w-6 text-white" />
+                           </div>
+                           {/* Empty state is minimal/hidden mostly until user types, but we show a hint */}
+                       </div>
+                    ) : (
+                      messages.map((message) => (
+                        <ChatMessage
+                          key={message.id}
+                          id={message.id}
+                          role={message.role}
+                          content={message.content}
+                          severity={message.severity}
+                          timestamp={formatTimestamp(message.createdAt)}
+                          isStreaming={message.isStreaming && isStreaming}
+                          onRegenerate={handleRegenerate}
+                          onExport={handleExport}
+                        />
+                      ))
+                    )}
+                    {isStreaming && (
+                      <div className="w-full pl-4 max-w-3xl">
+                        <TypingIndicator />
+                      </div>
+                    )}
+                    <div ref={bottomRef} className="h-4" />
+                </div>
             </div>
-          </Card>
+        </div>
 
-          <Separator className="border-border/70" />
-
-          <div className="flex-1 space-y-5 overflow-y-auto pr-2">
-            {status === "loading" ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Loading your session…
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-border/70 bg-[#202020]/70 p-10 text-center text-sm text-muted-foreground">
-                <p>Start by telling MediBot what you’re experiencing. Mention onset, intensity, and any triggers.</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  id={message.id}
-                  role={message.role}
-                  content={message.content}
-                  severity={message.severity}
-                  timestamp={formatTimestamp(message.createdAt)}
-                  isStreaming={message.isStreaming && isStreaming}
-                  onRegenerate={handleRegenerate}
-                  onExport={handleExport}
-                />
-              ))
-            )}
-            {isStreaming && (
-              <div className="flex justify-start">
-                <TypingIndicator />
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-
-          <div className={cn("sticky bottom-0 mt-auto bg-gradient-to-t from-background via-background/60 to-transparent py-4")}>
-            <ChatInput onSend={handleSend} disabled={!isAuthenticated || isStreaming} />
-          </div>
+        {/* Input Area */}
+        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#212121] via-[#212121] to-transparent pt-10 pb-6 px-4">
+             <div className="mx-auto w-full max-w-3xl">
+                 {messages.length === 0 && (
+                     <div className="text-center text-2xl font-semibold text-white/90 mb-8 font-sans">
+                         Describe your health concern
+                     </div>
+                 )}
+                 <div className="relative">
+                     <ChatInput 
+                        onSend={handleSend} 
+                        disabled={!isAuthenticated || isStreaming} 
+                        mode={mode}
+                        onModeChange={setMode}
+                     />
+                     <div className="mt-2 text-center text-xs text-white/30">
+                        MediBot can make mistakes. Consider checking important information.
+                     </div>
+                 </div>
+             </div>
         </div>
       </div>
     </div>
   );
 }
-

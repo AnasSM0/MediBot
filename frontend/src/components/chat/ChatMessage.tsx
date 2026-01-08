@@ -40,55 +40,66 @@ export function ChatMessage({
   onExport,
 }: ChatMessageProps) {
   const isAssistant = role === "assistant";
-  const severityVariant = severity === "severe" ? "warning" : severity === "moderate" ? "outline" : "default";
+  // User messages get a subtle background, Assistant messages blend in
+  const containerClass = isAssistant ? "bg-transparent px-4 py-8" : "bg-[#2F2F2F] rounded-3xl px-5 py-3 ml-auto max-w-[85%]";
+  const alignClass = isAssistant ? "w-full" : "w-fit";
 
   return (
-    <div className={cn("flex w-full animate-fade-in", isAssistant ? "justify-start" : "justify-end")}>
-      <Card
-        className={cn(
-          "relative max-w-2xl rounded-3xl px-6 py-4",
-          isAssistant ? "rounded-3xl rounded-bl-md bg-[#242424]/90" : "bg-gradient-to-br from-primary/90 to-accent/80",
-        )}
-      >
-        <div className="flex items-center justify-between gap-3 pb-3">
-          <div className="flex items-center gap-2">
-            <Badge variant={isAssistant ? "default" : "outline"}>{isAssistant ? "MediBot" : "You"}</Badge>
-            {severity && isAssistant && <Badge variant={severityVariant}>{severityCopy[severity]}</Badge>}
-          </div>
-          {timestamp && <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{timestamp}</span>}
+    <div className={cn("group flex w-full text-base", alignClass, isAssistant ? "justify-center" : "justify-end")}>
+      <div className={cn("relative flex w-full max-w-3xl flex-col gap-2 md:gap-3", containerClass)}>
+        <div className="flex items-center gap-2">
+           <div className="font-semibold text-sm text-foreground/80">
+             {isAssistant ? "MediBot" : "You"}
+           </div>
+           {severity && isAssistant && (
+             <span className={cn(
+               "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded",
+               severity === "severe" ? "bg-red-500/20 text-red-500" :
+               severity === "moderate" ? "bg-yellow-500/20 text-yellow-500" :
+               "bg-green-500/20 text-green-500"
+             )}>
+               {severity}
+             </span>
+           )}
         </div>
 
-        <div className={cn("prose prose-invert max-w-none text-sm", isStreaming && "opacity-90")}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ hr: () => <div className="my-4 border-t border-border" /> }}>
+        <div className={cn("prose prose-invert max-w-none text-base leading-relaxed tracking-normal text-gray-100", isStreaming && "animate-pulse")}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ 
+              hr: () => <div className="my-6 border-t border-white/10" />,
+              p: ({children}) => <p className="mb-4 last:mb-0">{children}</p>,
+              ul: ({children}) => <ul className="list-disc pl-4 mb-4 space-y-1">{children}</ul>,
+              ol: ({children}) => <ol className="list-decimal pl-4 mb-4 space-y-1">{children}</ol>,
+              h1: ({children}) => <h1 className="text-2xl font-bold mb-4 mt-6">{children}</h1>,
+              h2: ({children}) => <h2 className="text-xl font-bold mb-3 mt-5">{children}</h2>,
+              h3: ({children}) => <h3 className="text-lg font-bold mb-2 mt-4">{children}</h3>,
+            }}>
             {content}
           </ReactMarkdown>
         </div>
 
-        {isAssistant && (
-          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+        {isAssistant && !isStreaming && (
+          <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-8 gap-1 px-3"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
               onClick={() => onRegenerate?.(id)}
-              title="Regenerate response"
+              title="Regenerate"
             >
-              <RefreshCcw className="h-4 w-4" />
-              Regenerate
+              <RefreshCcw className="h-3 w-3" />
             </Button>
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="h-8 gap-1 px-3"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
               onClick={() => onExport?.(id)}
-              title="Export chat to text"
+              title="Copy"
             >
-              <ClipboardList className="h-4 w-4" />
-              Export
+              <ClipboardList className="h-3 w-3" />
             </Button>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

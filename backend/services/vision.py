@@ -87,14 +87,24 @@ INTERPRETATION GUIDELINES:
 - If image quality is insufficient to extract data, return the JSON with "ocr_text": "Unreadable", "uncertainty_flags": ["insufficient_quality"] and empty lists for other fields.
 """
 
-async def _analyze_with_gemini(content: bytes, mime_type: str) -> str:
+async def _analyze_with_gemini(content: bytes, mime_type: str, user_message: str = "") -> str:
     """Analyze image using Gemini Vision API."""
     if not GEMINI_API_KEY:
         raise Exception("GEMINI_API_KEY is not set")
     
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Select Model based on complexity/intent
+        msg_lower = user_message.lower() if user_message else ""
+        
+        # "Doctor Mode" / Complex -> Pro
+        target_model = "gemini-3-flash-preview"
+        if any(k in msg_lower for k in ["complex", "blurry", "scan", "mri", "x-ray", "detailed", "doctor", "hard to read"]):
+            target_model = "gemini-3-pro-preview"
+            
+        print(f"👁️ Using Gemini Vision Model: {target_model}")
+        model = genai.GenerativeModel(target_model)
         
         image_part = {
             "mime_type": mime_type or "image/jpeg",
@@ -106,7 +116,7 @@ async def _analyze_with_gemini(content: bytes, mime_type: str) -> str:
             generation_config={"response_mime_type": "application/json"}
         )
         
-        log_api_call("gemini", "/chat/image", "vision", success=True, metadata={"model": "gemini-1.5-flash"})
+        log_api_call("gemini", "/chat/image", "vision", success=True, metadata={"model": target_model})
         print(f"✅ Gemini vision analysis successful")
         return response.text
     except Exception as e:
@@ -181,12 +191,12 @@ async def _analyze_with_openrouter(content: bytes, mime_type: str) -> str:
         print(f"❌ OpenRouter Unexpected Error: {type(e).__name__}: {str(e)}")
         raise
 
-async def analyze_image(file: UploadFile) -> str:
+async def analyze_image(file: UploadFile, user_message: str = "") -> str:
     """
     Analyze image using Gemini Vision (primary) or OpenRouter Gemma (fallback).
     
     Priority:
-    1. Gemini 1.5 Flash (best for vision)
+    1. Gemini 3 Flash/Pro (best for vision)
     2. OpenRouter Gemma (fallback if Gemini unavailable)
     """
     try:
@@ -196,7 +206,7 @@ async def analyze_image(file: UploadFile) -> str:
         # Try Gemini first (primary vision provider)
         if GEMINI_API_KEY:
             try:
-                result = await _analyze_with_gemini(content, mime_type)
+                result = await _analyze_with_gemini(content, mime_type, user_message)
                 await file.seek(0)  # Reset file pointer
                 return result
             except Exception as gemini_error:

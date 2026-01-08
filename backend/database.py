@@ -45,10 +45,11 @@ async def init_models() -> None:
         from models import User, ChatSession, Message  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
 
-        # Simple schema migration for the new summary column
+        # Simple schema migration for the new summary column and mode column
         # This prevents the need for full Alembic setup in this specific fix
         try:
             await conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summary TEXT"))
+            await conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS mode VARCHAR(50) DEFAULT 'normal'"))
         except Exception as e:
             # If "IF NOT EXISTS" is not supported (unlikely in PG) or other error, log it lightly
             # Note: "ADD COLUMN IF NOT EXISTS" is standard in Postgres 9.6+

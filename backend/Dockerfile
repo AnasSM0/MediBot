@@ -1,28 +1,34 @@
-# ============================================
-# BASE IMAGE POLICY
-# ============================================
-# ✅ APPROVED: python:3.11-slim, node:20-alpine
-# ❌ REJECTED: ubuntu, python:latest, debian, python (non-slim)
-#
-# This Dockerfile uses ONLY approved base images.
-# Any changes must maintain compliance with the base image policy.
-# ============================================
-
-# ============================================
-# PRODUCTION REQUIREMENTS
-# ============================================
-# ✅ Non-root user (appuser:1001)
-# ✅ Expose only required ports (8000)
-# ✅ No debug flags
-# ✅ No hot reload
-# ✅ Multiple uvicorn workers
-# ✅ Production logging
-# ============================================
-
-# ============================================
-# Stage 1: Builder
-# ============================================
+# # syntax=docker/dockerfile:1
 FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ && rm -rf /var/lib/apt/lists/*
+
+# STEP 1: Create the venv once
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# STEP 2: Install ONLY the heavy stuff first (Optional but faster)
+# If Torch is always there, you can even hardcode it here to "lock" it in a layer.
+# RUN pip install torch==2.x.x --no-cache-dir 
+
+# STEP 3: Use the cache mount correctly with requirements.txt
+COPY requirements.txt .
+
+# Use a named cache ID to ensure the cache persists across different build stages
+RUN --mount=type=cache,id=pip-cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# ============================================
+# Stage 2: Runtime (Remains largely the same)
+# ============================================
+FROM python:3.11-slim AS runtime
 
 # Set build environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -44,9 +50,11 @@ RUN apt-get update && \
 COPY requirements.txt .
 
 # Create virtual environment and install dependencies
-RUN python -m venv /opt/venv && \
+# Use cache mount to speed up subsequent builds
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m venv /opt/venv && \
     /opt/venv/bin/pip install --upgrade pip && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+    /opt/venv/bin/pip install -r requirements.txt
 
 # ============================================
 # Stage 2: Runtime

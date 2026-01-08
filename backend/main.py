@@ -26,9 +26,12 @@ app.add_middleware(
 )
 
 
+from services.faiss_search import initialize_faiss_service
+
 @app.on_event("startup")
 async def on_startup() -> None:
     await init_models()
+    initialize_faiss_service()
 
 
 app.include_router(chat_router, prefix="")

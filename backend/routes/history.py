@@ -34,6 +34,7 @@ async def get_session(session_id: str, auth: AuthUser = AuthDependency, db: Asyn
     return {
         "id": session.id,
         "title": session.title,
+        "mode": session.mode,
         "created_at": session.created_at.isoformat(),
         "updated_at": session.updated_at.isoformat(),
         "messages": [
@@ -48,4 +49,15 @@ async def get_session(session_id: str, auth: AuthUser = AuthDependency, db: Asyn
         ],
     }
 
-
+@router.delete("/history/{session_id}")
+async def delete_session(session_id: str, auth: AuthUser = AuthDependency, db: AsyncSession = Depends(get_db)):
+    user_id = auth["sub"]
+    result = await db.execute(select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id))
+    session = result.scalar_one_or_none()
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    await db.delete(session)
+    await db.commit()
+    return {"status": "success", "id": session_id}
