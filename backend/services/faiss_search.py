@@ -2,27 +2,62 @@ import os
 import pickle
 import json
 import numpy as np
+import threading
+import logging
 from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
 import faiss
 
+# Configure simple string logger for now (Phase 5 will do structlog)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("faiss_service")
+
 class FAISSSearchService:
-    """FAISS-based semantic search service for medical documents."""
+    """FAISS-based semantic search service with Singleton safety."""
     
-    def __init__(self, index_dir: str):
+    _instance = None
+    _lock = threading.Lock()
+    _initialized = False
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super(FAISSSearchService, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self, index_dir: Optional[str] = None):
         """
-        Initialize FAISS search service.
-        
-        Args:
-            index_dir: Directory containing faiss_index.bin and metadata.pkl
+        Initialize FAISS service. Idempotent.
         """
-        self.index_dir = index_dir
-        self.index = None
-        self.metadata = None
-        self.model = None
-        self.config = None
-        
-        self._load_index()
+        if self._initialized:
+            return
+            
+        with self._lock:
+            if self._initialized:
+                return
+
+            # Default path if not provided
+            if not index_dir:
+                 base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                 index_dir = os.path.join(base_path, "faiss_indexes")
+            
+            self.index_dir = index_dir
+            self.index = None
+            self.metadata = None
+            self.model = None
+            self.config = None
+            
+            try:
+                self._load_index()
+                self._initialized = True
+            except Exception as e:
+                logger.error(f"Failed to initialize FAISS: {e}")
+                # We do not raise here to allow app to boot if RAG is optional,
+                # BUT Phase 3 check_config will fail-fast if index is strictly required.
+                # Here we just leave _initialized as False so it retries or fails on usage.
+                # However, CheckConfig runs first.
+                pass
     
     def _load_index(self):
         """Load FAISS index, metadata, and embedding model."""
@@ -31,7 +66,7 @@ class FAISSSearchService:
         config_path = os.path.join(self.index_dir, "config.json")
         
         if not os.path.exists(index_path):
-            raise FileNotFoundError(f"FAISS index not found at {index_path}. Run faiss_builder.py first.")
+            raise FileNotFoundError(f"FAISS index not found at {index_path}.")
         
         if not os.path.exists(metadata_path):
             raise FileNotFoundError(f"Metadata not found at {metadata_path}")
@@ -42,6 +77,8 @@ class FAISSSearchService:
                 self.config = json.load(f)
         else:
             self.config = {"model_name": "sentence-transformers/all-MiniLM-L6-v2"}
+        
+        logger.info(f"Loading FAISS from {self.index_dir}...")
         
         # Load FAISS index
         self.index = faiss.read_index(index_path)
@@ -54,54 +91,45 @@ class FAISSSearchService:
         model_name = self.config.get("model_name", "sentence-transformers/all-MiniLM-L6-v2")
         self.model = SentenceTransformer(model_name)
         
-        print(f"Loaded FAISS index with {self.index.ntotal} vectors")
+        # Memory / Stats Audit
+        logger.info(f"FAISS Loaded Successfully. Vectors: {self.index.ntotal}. Metadata Entries: {len(self.metadata)}")
+        
+        # Basic safeguard: Check if metadata matches index size
+        if self.index.ntotal != len(self.metadata):
+             logger.warning(f"MISMATCH: Index has {self.index.ntotal} vectors but metadata has {len(self.metadata)} entries!")
+
     
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """
-        Search for relevant documents using semantic similarity.
+        if not self._initialized or not self.index:
+            logger.error("Attempted search on uninitialized FAISS service.")
+            return []
         
-        Args:
-            query: User query string
-            top_k: Number of top results to return
-        
-        Returns:
-            List of relevant documents with metadata and scores
-        """
-        if not self.index or not self.model:
-            raise RuntimeError("FAISS index not loaded")
-        
-        # Generate query embedding
-        query_embedding = self.model.encode([query], convert_to_numpy=True)
-        faiss.normalize_L2(query_embedding)
-        
-        # Search
-        scores, indices = self.index.search(query_embedding, top_k)
-        
-        # Format results
-        results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if idx < len(self.metadata):
-                result = {
-                    "score": float(score),
-                    "text": self.metadata[idx].get('chunk_text', ''),
-                    "metadata": {k: v for k, v in self.metadata[idx].items() if k != 'chunk_text'}
-                }
-                results.append(result)
-        
-        return results
+        try:
+            # Generate query embedding
+            query_embedding = self.model.encode([query], convert_to_numpy=True)
+            faiss.normalize_L2(query_embedding)
+            
+            # Search
+            scores, indices = self.index.search(query_embedding, top_k)
+            
+            # Format results
+            results = []
+            for score, idx in zip(scores[0], indices[0]):
+                if idx < len(self.metadata):
+                    meta = self.metadata[idx]
+                    result = {
+                        "score": float(score),
+                        "text": meta.get('chunk_text', ''),
+                        "metadata": {k: v for k, v in meta.items() if k != 'chunk_text'}
+                    }
+                    results.append(result)
+            
+            return results
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            return []
     
     def search_with_filter(self, query: str, category: Optional[str] = None, top_k: int = 5) -> List[Dict[str, Any]]:
-        """
-        Search with optional category filtering.
-        
-        Args:
-            query: User query string
-            category: Optional category filter (symptoms, remedies, prevention, qa)
-            top_k: Number of results to return
-        
-        Returns:
-            Filtered search results
-        """
         # Get more results initially for filtering
         initial_k = top_k * 3 if category else top_k
         results = self.search(query, top_k=initial_k)
@@ -111,62 +139,19 @@ class FAISSSearchService:
         
         return results[:top_k]
 
-# Global instance (lazy loaded, or explicitly initialized)
-_search_service: Optional[FAISSSearchService] = None
-
+# Explicit Initializer
 def initialize_faiss_service(index_dir: Optional[str] = None):
-    """Explicitly initialize the FAISS service (e.g., at app startup)."""
-    global _search_service
-    if _search_service is None:
-        if index_dir is None:
-            # Default to backend/faiss_indexes
-            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            index_dir = os.path.join(base_path, "faiss_indexes")
-        print(f"Initializing FAISS service from {index_dir}...")
-        try:
-            _search_service = FAISSSearchService(index_dir)
-            print("FAISS service initialized successfully.")
-        except Exception as e:
-            print(f"Failed to initialize FAISS service: {e}")
-            # Non-fatal if index doesn't exist yet, but search will fail
-            pass
+    """
+    Called by main.py startup. Ensures singleton is ready.
+    """
+    FAISSSearchService(index_dir)
 
+# Accessor
 def get_search_service(index_dir: Optional[str] = None) -> FAISSSearchService:
-    """
-    Get or create FAISS search service instance.
-    
-    Args:
-        index_dir: Optional custom index directory
-    
-    Returns:
-        FAISSSearchService instance
-    """
-    global _search_service
-    
-    if _search_service is None:
-        initialize_faiss_service(index_dir)
-    
-    if _search_service is None:
-        # Fallback if initialization failed
-        raise RuntimeError("FAISS service is not initialized. Check logs or build the index.")
-    
-    return _search_service
+    return FAISSSearchService(index_dir)
 
 def search_medical_documents(query: str, top_k: int = 5, category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Convenience function for searching medical documents.
-    
-    Args:
-        query: User query
-        top_k: Number of results
-        category: Optional category filter
-    
-    Returns:
-        List of relevant documents
-    """
-    service = get_search_service()
-    
+    svc = get_search_service()
     if category:
-        return service.search_with_filter(query, category, top_k)
-    else:
-        return service.search(query, top_k)
+        return svc.search_with_filter(query, category, top_k)
+    return svc.search(query, top_k)

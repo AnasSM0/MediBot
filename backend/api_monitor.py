@@ -15,6 +15,10 @@ LOGS_DIR.mkdir(exist_ok=True)
 
 API_USAGE_LOG = LOGS_DIR / "api_usage.jsonl"
 
+from utils.logger import setup_logger
+
+logger = setup_logger("api_monitor")
+
 def log_api_call(
     provider: Literal["gemini", "openrouter", "local"],
     endpoint: str,
@@ -34,24 +38,31 @@ def log_api_call(
         error: Error message if failed
         metadata: Additional metadata (e.g., model name, session_id)
     """
-    log_entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+    log_data = {
+        "event": "api_call",
         "provider": provider,
         "endpoint": endpoint,
         "request_type": request_type,
         "success": success,
-        "error": error,
+        "error": error, 
         "metadata": metadata or {}
     }
     
-    # Append to JSONL file
+    if success:
+        logger.info(json.dumps(log_data))
+    else:
+        logger.error(json.dumps(log_data))
+
+    # Append to JSONL file (keeping legacy file log for stats command)
     try:
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            **log_data
+        }
         with open(API_USAGE_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry) + "\n")
     except Exception as e:
-        # Silent fail or print to stderr to avoid breaking main flow
-        import sys
-        print(f"Warning: Failed to log API usage to {API_USAGE_LOG}: {e}", file=sys.stderr)
+        logger.error(f"Failed to write to API usage log: {e}")
 
 def get_usage_stats(hours: int = 24) -> dict:
     """

@@ -30,6 +30,5 @@ venv/
 .DS_Store
 coverage/
 knowledge_base/
-datasets/
 faiss_indexes/
 __pycache__

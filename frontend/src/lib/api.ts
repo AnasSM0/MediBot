@@ -4,6 +4,7 @@ export type ChatStreamHandlers = {
   image?: File;
   sessionId?: string;
   mode?: string;
+  onStart?: (payload: { sessionId: string; messageId: string }) => void;
   onChunk: (chunk: string) => void;
   onDone: (payload: { sessionId: string; messageId: string; severity: string; requiresAttention: boolean }) => void;
   onError: (error: Error) => void;
@@ -41,12 +42,13 @@ export async function apiFetch<TResponse>(path: string, options: FetchOptions = 
   return (await response.json()) as TResponse;
 }
 
-export async function streamChat({
+  export async function streamChat({
   token,
   message,
   image,
   sessionId,
   mode,
+  onStart,
   onChunk,
   onDone,
   onError,
@@ -104,6 +106,7 @@ export async function streamChat({
         if (!dataString || dataString === "[DONE]") continue;
         const payload = JSON.parse(dataString) as
           | { type: "chunk"; content: string }
+          | { type: "start"; session_id: string; message_id: string }
           | {
               type: "done";
               session_id: string;
@@ -113,7 +116,12 @@ export async function streamChat({
             }
           | { type: "debug"; content: string };
 
-        if (payload.type === "chunk") {
+        if (payload.type === "start" && onStart) {
+            onStart({
+                sessionId: payload.session_id,
+                messageId: payload.message_id
+            });
+        } else if (payload.type === "chunk") {
           onChunk(payload.content);
         } else if (payload.type === "done") {
           onDone({

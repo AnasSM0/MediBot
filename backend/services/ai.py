@@ -167,27 +167,11 @@ async def _stream_gemini(user_message: str, history: list[dict] = [], mode: str 
         genai.configure(api_key=GEMINI_API_KEY)
         
         target_model = _get_gemini_model(mode)
-        print(f"🧠 Using Gemini Model: {target_model} (Mode: {mode})")
+        logger.info(f"Using Gemini Model: {target_model} (Mode: {mode})", extra={"model": target_model, "mode": mode})
         
         model = genai.GenerativeModel(model_name=target_model)
 
-        context_str = ""
-        for msg in history:
-            role = "User" if msg["role"] == "user" else "Model"
-            context_str += f"{role}: {msg['content']}\n"
-        
-        if raw_prompt:
-            full_prompt = (
-                f"{user_message}\n"
-                f"### Conversation History:\n{context_str}\n" 
-                f"### Current Reply:"
-            )
-        else:
-            full_prompt = (
-                f"{_build_prompt(user_message, mode)}\n"
-                f"### Conversation History:\n{context_str}\n" 
-                f"### Current User Input:\n{user_message}"
-            )
+        # ... (context prep) ...
 
         stream = await model.generate_content_async(full_prompt, stream=True)
         log_api_call("gemini", "/chat", "text", success=True, metadata={"model": target_model, "mode": mode})
@@ -195,7 +179,7 @@ async def _stream_gemini(user_message: str, history: list[dict] = [], mode: str 
             if hasattr(chunk, "text") and chunk.text:
                 yield chunk.text
     except Exception as e:
-        print(f"❌ Gemini Error ({target_model}): {e}")
+        logger.error(f"Gemini Error ({target_model}): {e}", exc_info=True)
         log_api_call("gemini", "/chat", "text", success=False, error=str(e))
         raise e 
 

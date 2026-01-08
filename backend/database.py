@@ -20,7 +20,17 @@ if not DATABASE_URL:
         "Please ensure it's defined in your .env file or docker-compose.yml"
     )
 
-engine = create_async_engine(DATABASE_URL, future=True, echo=False, pool_pre_ping=True)
+# Configure connection pool for production streaming
+engine = create_async_engine(
+    DATABASE_URL, 
+    future=True, 
+    echo=False, 
+    pool_pre_ping=True,
+    pool_size=20,          # Increased from default (5)
+    max_overflow=10,       # Allow burst
+    pool_timeout=30,       # Fail fast if pool exhausted
+    pool_recycle=1800      # Recycle connections every 30 mins
+)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, autoflush=False, autocommit=False, class_=AsyncSession)
 
 
@@ -34,25 +44,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_models() -> None:
-    # Alembic is preferred in production; for dev bootstrap we ensure extensions and schemas exist.
+    # In production, use Alembic. 
+    # For dev bootstrap, we keep create_all but removing manual schema mutations.
     async with engine.begin() as conn:
-        # Ensure uuid-ossp if needed; safe on Postgres where permitted.
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""))
         except Exception:
-            # Ignore if not supported (e.g., Neon/Supabase restricted)
             pass
-        from models import User, ChatSession, Message  # noqa: F401
+        # We still sync metadata for dev convenience, but rely on Alembic for migrations
         await conn.run_sync(Base.metadata.create_all)
-
-        # Simple schema migration for the new summary column and mode column
-        # This prevents the need for full Alembic setup in this specific fix
-        try:
-            await conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summary TEXT"))
-            await conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS mode VARCHAR(50) DEFAULT 'normal'"))
-        except Exception as e:
-            # If "IF NOT EXISTS" is not supported (unlikely in PG) or other error, log it lightly
-            # Note: "ADD COLUMN IF NOT EXISTS" is standard in Postgres 9.6+
-            print(f"Schema check (safe to ignore if column exists): {e}")
 
 

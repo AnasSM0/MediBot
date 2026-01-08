@@ -9,13 +9,32 @@ from routes.history import router as history_router
 from routes.auth import router as auth_router
 from database import init_models, engine
 from sqlalchemy import text
+from check_config import validate_config
 
+# FAIL-FAST: Validate configuration before app startup
+# This prevents the application from booting in a degraded state.
+validate_config()
 
 load_dotenv()
 
 app = FastAPI(title="MediBot Backend", default_response_class=JSONResponse)
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+
+from fastapi import Request, Response
+import uuid
+from utils.logger import set_request_id, setup_logger
+
+logger = setup_logger("main")
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    set_request_id(request_id)
+    
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 app.add_middleware(
     CORSMiddleware,
