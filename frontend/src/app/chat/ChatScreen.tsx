@@ -196,7 +196,9 @@ export function ChatScreen({ initialSessionId }: { initialSessionId: string | nu
     }
   };
 
-  const handleSend = async (content: string, image?: File) => {
+   const streamingContentRef = useRef(""); // Track content to avoid closure staleness
+
+   const handleSend = async (content: string, image?: File) => {
     if (!isAuthenticated) return;
 
     // 1. Setup Transient State
@@ -216,6 +218,8 @@ export function ChatScreen({ initialSessionId }: { initialSessionId: string | nu
         createdAt: new Date().toISOString(),
         isStreaming: true
     });
+    
+    streamingContentRef.current = ""; // Reset ref
     
     setIsStreaming(true);
     setRagDebugInfo(null);
@@ -244,54 +248,41 @@ export function ChatScreen({ initialSessionId }: { initialSessionId: string | nu
           }
       },
       onChunk: (chunk) => {
-          setStreamingMsg(prev => prev ? { ...prev, content: prev.content + chunk } : null);
+          streamingContentRef.current += chunk; // Update ref
+          setStreamingMsg(prev => prev ? { ...prev, content: streamingContentRef.current } : null);
       },
       onDone: async (payload) => {
           // 4. Finalize
-          // Don't modify streamingMsg here yet, wait for sync? 
-          // Actually, we should trigger a sync from server.
-          // But to be responsive, we can "commit" our streaming message to serverMessages local cache?
-          // No, safer to just refetch session.
-          
           setIsStreaming(false);
-          const finalContent = streamingMsg?.content || ""; // capture for speech
-          
-          // Clear transient states SOON, but after fetch replaces them?
-          // If we clear `streamingMsg` immediately, it disappears until `fetch` returns (flicker).
-          // So we should KEEP it until `fetch` returns.
-          // The merging logic handles preference (Streaming > Server).
-          // Once fetch returns, Server has the message.
-          // But Server message won't be "isStreaming". 
-          // So streamingMsg (with isStreaming=true) would still override Server message?
-          // Yes. So we must clear `streamingMsg` AFTER fetch confirms it's there.
-          // OR, we manually update `streamingMsg` to `isStreaming=false` and move it to `serverMessages`?
-          
-          // Let's manually commit to serverMessages to ensure smoothness
-          // Then fetchSession will serve as the "consistency check" later.
-          
-          setServerMessages(prev => {
-             // Append pending user + assistant
-             const newServer = [...prev];
-             if (pendingUserMsg && !newServer.some(m => m.content === pendingUserMsg.content)) { // heuristic check again
-                 newServer.push(pendingUserMsg);
-             }
-             // Assistant
-             const realId = payload.messageId; // or streamingMsg.id
-             /* We don't have the final content here from payload (chunked), 
-                so we use the streamingMsg content state. */
-             
-             // We can't easily access the functional state inside setServerMessages closure.
-             return newServer; 
-             // This is getting complex.
-             // Simpler: Just rely on fetchSession.
-             // To prevent flicker, we leave streamingMsg/pendingUserMsg active?
-             // But if we setIsStreaming(false), does that matter?
-             // Not really.
-          });
+          const finalContent = streamingContentRef.current; 
           
           if (payload.severity && voiceOutputEnabled) speak(finalContent); 
 
-          await Promise.all([
+          // IMMEDIATE OPTIMISTIC UPDATE
+          setServerMessages(prev => {
+              const current = [...prev];
+              // Ensure we don't duplicate
+              if (!current.some(m => m.id === payload.messageId)) {
+                  current.push({
+                      id: payload.messageId,
+                      role: "assistant", // It's always assistant in onDone here
+                      content: finalContent,
+                      severity: payload.severity as any,
+                      createdAt: new Date().toISOString(),
+                  });
+              } else {
+                  // If it exists (rare), update content
+                  const idx = current.findIndex(m => m.id === payload.messageId);
+                  current[idx] = { ...current[idx], content: finalContent, severity: payload.severity as any };
+              }
+              return current;
+          });
+
+          setPendingUserMsg(null);
+          setStreamingMsg(null);
+
+          // Background consistency check
+          Promise.all([
              fetchSession(accessToken, payload.sessionId).then(data => {
                  const loaded = data.messages.map((m: any) => ({
                     id: m.id,
@@ -300,18 +291,15 @@ export function ChatScreen({ initialSessionId }: { initialSessionId: string | nu
                     severity: m.structured?.severity,
                     createdAt: m.created_at,
                 }));
+                // We trust the server eventually, but for now we have the optimistic update
                 setServerMessages(loaded);
-                // Now safe to clear transients
-                setPendingUserMsg(null);
-                setStreamingMsg(null);
              }),
              loadHistory()
-          ]);
+          ]).catch(e => console.error("Background sync failed", e));
       },
       onError: (err) => {
         setIsStreaming(false);
         toast({ title: "Error", description: "Message failed.", variant: "destructive" });
-        // Clean up partials?
         setStreamingMsg(null);
       },
       onDebug: setRagDebugInfo

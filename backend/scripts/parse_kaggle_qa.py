@@ -8,8 +8,13 @@ import sys
 # Increase CSV field size limit just in case
 csv.field_size_limit(10 * 1024 * 1024)
 
-INPUT_FILE = r"E:\work\MediBot\MediBot\backend\DataSets\kaggel QA.csv"
-OUTPUT_DIR = r"E:\work\MediBot\MediBot\backend\knowledge_base\qa"
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Navigate to backend directory (parent of scripts)
+BACKEND_DIR = os.path.dirname(SCRIPT_DIR)
+
+INPUT_FILE = os.path.join(BACKEND_DIR, "DataSets", "kaggel QA.csv")
+OUTPUT_DIR = os.path.join(BACKEND_DIR, "knowledge_base", "qa")
 
 def clean_question(q):
     q = q.strip()

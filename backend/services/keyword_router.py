@@ -1,8 +1,13 @@
 import os
 import re
 
+# Get the directory where this file is located
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Navigate to backend directory (parent of services)
+BACKEND_DIR = os.path.dirname(CURRENT_DIR)
+
 # Base paths
-BASE_KB_PATH = r"E:\work\MediBot\MediBot\backend\knowledge_base"
+BASE_KB_PATH = os.path.join(BACKEND_DIR, "knowledge_base")
 
 CATEGORIES = {
     "symptoms": os.path.join(BASE_KB_PATH, "symptoms"),

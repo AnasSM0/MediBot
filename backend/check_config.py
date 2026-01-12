@@ -19,8 +19,8 @@ def check_env_vars():
     """Validate presence of critical environment variables."""
     required_vars = [
         "DATABASE_URL", 
-        "GEMINI_API_KEY", 
-        "REDIS_URL"
+        "GEMINI_API_KEY"
+        # REDIS_URL removed - Redis cache is optional
     ]
     missing = [var for var in required_vars if not os.getenv(var)]
     
@@ -89,8 +89,9 @@ def validate_config():
     if not check_env_vars():
         sys.exit(1)
 
-    if not check_redis():
-        sys.exit(1)
+    # Redis check disabled - Redis cache is optional
+    # if not check_redis():
+    #     sys.exit(1)
 
     # FAISS check (Soft fail or strict? Prompt says "If ANY check fails... Exit")
     # I will be strict about existence, assuming a valid deployment maps the volume.
@@ -99,25 +100,12 @@ def validate_config():
         logger.error("FAISS index directory missing.")
         sys.exit(1)
 
-    # Async check requires loop
-    try:
-        # Check if we are in a loop (unlikely at module level)
-        asyncio.run(check_db_async())
-    except Exception as e:
-        # If DB check returned False inside, we need to catch it?
-        # check_db_async returns boolean, we need to check val.
-        pass 
-        
-    # Re-run properly getting result
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    db_success = loop.run_until_complete(check_db_async())
-    loop.close()
-    
-    if not db_success:
-        sys.exit(1)
+    # Note: Database check is skipped here because this function is called at module import time
+    # when uvicorn's event loop is already running. Database connectivity is verified in:
+    # 1. The /healthz endpoint
+    # 2. The FastAPI startup event (init_models)
+    logger.info("Configuration validation passed (DB check deferred to startup event).")
 
-    logger.info("Configuration validation passed.")
 
 if __name__ == "__main__":
     validate_config()

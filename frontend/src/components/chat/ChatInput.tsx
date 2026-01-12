@@ -13,10 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const VoiceInputButton = dynamic(
-  () => import("@/components/chat/VoiceInputButton").then((mod) => mod.VoiceInputButton),
-  { ssr: false }
-);
+
 
 type ChatInputProps = {
   placeholder?: string;
@@ -87,11 +84,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       }
     };
 
-    const handleVoiceTranscript = (transcript: string) => {
-      setValue(transcript);
-      // Auto-focus textarea after voice input
-      textareaRef.current?.focus();
-    };
+
 
     const getModeIcon = () => {
       switch (mode) {
@@ -170,10 +163,7 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             <Paperclip className="h-5 w-5" />
           </Button>
   
-          <VoiceInputButton
-            onTranscript={handleVoiceTranscript}
-            disabled={disabled || isSending}
-          />
+
   
           <textarea
             ref={textareaRef}

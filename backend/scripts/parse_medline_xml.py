@@ -4,8 +4,13 @@ import json
 import re
 import html
 
-# Provided path
-path = r"E:\work\MediBot\MediBot\backend\DataSets\mplus_topics_2026-01-06.xml"
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Navigate to backend directory (parent of scripts)
+BACKEND_DIR = os.path.dirname(SCRIPT_DIR)
+
+# Input XML file path
+path = os.path.join(BACKEND_DIR, "DataSets", "mplus_topics_2026-01-06.xml")
 
 def clean_text(text):
     if not text:
@@ -35,7 +40,7 @@ def parse_medline_xml():
         print(f"Error parsing XML: {e}")
         return
 
-    base_output_dir = r"E:\work\MediBot\MediBot\backend\knowledge_base"
+    base_output_dir = os.path.join(BACKEND_DIR, "knowledge_base")
     
     count = 0
     for topic in root.findall('health-topic'):

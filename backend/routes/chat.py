@@ -138,7 +138,7 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency):
              await db.execute(
                 update(Message)
                 .where(Message.id == assistant_message_id)
-                .values(content=cached_response, structured={"severity": final_severity})
+                .values(content=cached_response)
              )
              await db.commit()
         
@@ -163,10 +163,13 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency):
     if current_mode == "deep_research":
         k = 12
     chunks = rag.retrieve(message_text, k=k)
+    print(f"DEBUG: Retrieved {len(chunks)} chunks.")
 
     # 2. Build Prompt
     prompt_data = rag.build_prompt(message_text, chunks, mode=current_mode)
     final_prompt = prompt_data["prompt"]
+    print(f"DEBUG: Final Prompt Size: {len(final_prompt)} chars")
+    # print(f"DEBUG: Final Prompt Preview: {final_prompt[:200]}...")
 
     # 3. Debug Inspection
     debug_info = None
@@ -216,7 +219,7 @@ async def chat(body: ChatBody, auth: AuthUser = AuthDependency):
             await db.execute(
                 update(Message)
                 .where(Message.id == assistant_message_id)
-                .values(content=full_text, structured={"severity": final_severity})
+                .values(content=full_text)
             )
             await db.commit()
         

@@ -8,16 +8,16 @@ echo.
 
 REM 1. Check if FAISS index exists
 echo [1/5] Checking FAISS index files...
-if exist "backend\faiss_indexes\medical_index.faiss" (
+if exist "backend\faiss_indexes\faiss_index.bin" (
     echo   ✓ FAISS index found
 ) else (
     echo   ✗ FAISS index NOT found
-    echo   Run: python backend\services\faiss_builder.py
+    echo   Run: python backend\build_faiss_index.py
     pause
     exit /b 1
 )
 
-if exist "backend\faiss_indexes\medical_metadata.json" (
+if exist "backend\faiss_indexes\metadata.pkl" (
     echo   ✓ Metadata file found
 ) else (
     echo   ✗ Metadata file NOT found

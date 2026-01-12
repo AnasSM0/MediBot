@@ -5,7 +5,12 @@ Run this to verify your FAISS index is working correctly
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
+
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Add backend to path
+BACKEND_DIR = os.path.join(SCRIPT_DIR, 'backend')
+sys.path.insert(0, BACKEND_DIR)
 
 def test_faiss():
     print("=" * 60)
@@ -15,22 +20,32 @@ def test_faiss():
     
     # 1. Check if index files exist
     print("1️⃣ Checking index files...")
-    index_path = "backend/faiss_indexes/medical_index.faiss"
-    metadata_path = "backend/faiss_indexes/medical_metadata.json"
+    
+    # Use dynamic paths
+    faiss_indexes_dir = os.path.join(BACKEND_DIR, "faiss_indexes")
+    index_path = os.path.join(faiss_indexes_dir, "faiss_index.bin")
+    metadata_path = os.path.join(faiss_indexes_dir, "metadata.pkl")
+    config_path = os.path.join(faiss_indexes_dir, "config.json")
     
     if os.path.exists(index_path):
         size_mb = os.path.getsize(index_path) / (1024 * 1024)
         print(f"   ✅ Index file found: {size_mb:.2f} MB")
     else:
         print(f"   ❌ Index file NOT found at {index_path}")
-        print("   Run: python backend/services/faiss_builder.py")
+        print(f"   Run: python {os.path.join(BACKEND_DIR, 'build_faiss_index.py')}")
         return
     
     if os.path.exists(metadata_path):
-        print(f"   ✅ Metadata file found")
+        size_mb = os.path.getsize(metadata_path) / (1024 * 1024)
+        print(f"   ✅ Metadata file found: {size_mb:.2f} MB")
     else:
         print(f"   ❌ Metadata file NOT found")
         return
+    
+    if os.path.exists(config_path):
+        print(f"   ✅ Config file found")
+    else:
+        print(f"   ⚠️  Config file NOT found (optional)")
     
     print()
     
@@ -38,10 +53,13 @@ def test_faiss():
     print("2️⃣ Initializing FAISS service...")
     try:
         from services.faiss_search import get_search_service
-        service = get_search_service()
+        service = get_search_service(index_dir=faiss_indexes_dir)
         print(f"   ✅ Service initialized successfully")
+        print(f"   📊 Index contains {service.index.ntotal} vectors")
     except Exception as e:
         print(f"   ❌ Failed to initialize: {e}")
+        import traceback
+        traceback.print_exc()
         return
     
     print()

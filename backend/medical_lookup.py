@@ -1,14 +1,14 @@
 import csv
 import os
 
-# Define dataset directory path
-DATA_PATH = os.path.join(os.path.dirname(__file__), "datasets")
+# Define dataset directory path - use dynamic path resolution
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "DataSets")
 
 SYMPTOM_DESC_FILE = os.path.join(DATA_PATH, "symptom_Description.csv")
 SYMPTOM_PRECAUTION_FILE = os.path.join(DATA_PATH, "symptom_precaution.csv")
-SYMPTOM_SEVERITY_FILE = os.path.join(DATA_PATH, "symptom_severity.csv")
+SYMPTOM_SEVERITY_FILE = os.path.join(DATA_PATH, "Symptom-severity.csv")  # Fixed: Capital S and hyphen
 SYMPTOM_DATASET_FILE = os.path.join(DATA_PATH, "dataset.csv")
-HOME_REMEDIES_FILE = os.path.join(DATA_PATH, "home_remedies.csv")
+HOME_REMEDIES_FILE = os.path.join(DATA_PATH, "Home Remedies.csv")  # Fixed: Capital H, R and space
 
 
 class MedicalLookup:
