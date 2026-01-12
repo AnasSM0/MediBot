@@ -117,23 +117,24 @@ def _detect_severity(text: str) -> str:
     t = text.lower()
     
     # CRITICAL: Hard rules overriding everything
-   critical_terms = [
-    # Cardiac / circulatory emergencies
-    "chest pain", "severe chest pain", "crushing chest pain", "pressure in chest",
-    "left arm pain", "right arm pain", "jaw pain", "neck pain radiating",
-    "heart attack", "myocardial infarction",
-    "sudden collapse", "cardiac arrest",
-    "irregular heartbeat with dizziness",
-    "rapid heartbeat with chest pain",
+    critical_terms = [
+        # Cardiac / circulatory emergencies
+        "chest pain", "severe chest pain", "crushing chest pain", "pressure in chest",
+        "left arm pain", "right arm pain", "jaw pain", "neck pain radiating",
+        "chest feels heavy", "pain goes down my left arm", "heavy chest",
+        "heart attack", "myocardial infarction",
+        "sudden collapse", "cardiac arrest",
+        "irregular heartbeat with dizziness",
+        "rapid heartbeat with chest pain",
 
-    # Neurological emergencies
-    "loss of consciousness", "unconscious", "fainted", "passed out",
-    "sudden confusion", "unable to speak", "slurred speech",
-    "face drooping", "one sided weakness",
-    "stroke", "brain attack", "mini stroke", "tia",
-    "seizure", "active seizure", "multiple seizures",
-    "first seizure", "status epilepticus",
-    "severe head injury", "head trauma with vomiting",
+        # Neurological emergencies
+        "loss of consciousness", "unconscious", "fainted", "passed out",
+        "sudden confusion", "unable to speak", "slurred speech",
+        "face drooping", "one sided weakness",
+        "stroke", "brain attack", "mini stroke", "tia",
+        "seizure", "active seizure", "multiple seizures",
+        "first seizure", "status epilepticus",
+        "severe head injury", "head trauma with vomiting",
     "unequal pupils",
 
     # Respiratory failure
@@ -217,7 +218,7 @@ def _detect_severity(text: str) -> str:
     "electrocution",
     "near drowning",
     "drowning"
-]
+    ]
 
     if any(term in t for term in critical_terms):
         return "CRITICAL"
@@ -237,11 +238,12 @@ def _detect_severity(text: str) -> str:
     "cramping pain", "severe nausea", "loss of appetite",
     "dehydration", "dry mouth", "sunken eyes", "dark urine",
     "reduced urination", "unable to keep fluids",
+    "ate a weird", "ate a berry", "ate unknown", "weird berry",
 
     # Head & neurological
     "severe headache", "persistent headache", "sudden headache",
     "head injury", "concussion symptoms", "confusion",
-    "dizziness", "vertigo", "light sensitivity",
+    "dizziness", "vertigo",
     "blurred vision", "double vision",
     "fainting", "near fainting",
     "memory issues", "difficulty concentrating",

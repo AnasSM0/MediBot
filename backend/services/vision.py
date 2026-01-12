@@ -17,14 +17,7 @@ except ImportError:
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Debug: Log which API keys are available
-print(f"🔑 Vision API Keys Status:")
-print(f"  - GEMINI_API_KEY: {'✅ SET' if GEMINI_API_KEY else '❌ NOT SET'}")
-print(f"  - OPENROUTER_API_KEY: {'✅ SET' if OPENROUTER_API_KEY else '❌ NOT SET'}")
-if GEMINI_API_KEY:
-    print(f"  - Gemini Key Preview: {GEMINI_API_KEY[:20]}...")
-if OPENROUTER_API_KEY:
-    print(f"  - OpenRouter Key Preview: {OPENROUTER_API_KEY[:20]}...")
+
 
 
 # Vision analysis prompt (shared between Gemini and OpenRouter)
