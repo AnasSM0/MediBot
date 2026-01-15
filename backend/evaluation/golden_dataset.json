@@ -1,0 +1,142 @@
+[
+  {
+    "id": "1",
+    "question": "What are the common symptoms of a heart attack?",
+    "expected_answer": "Chest pain or discomfort, feeling weak, light-headed, or faint, pain or discomfort in the jaw, neck, or back, pain or discomfort in one or both arms or shoulders, shortness of breath.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "2",
+    "question": "Can I take ibuprofen for a headache if I am pregnant?",
+    "expected_answer": "It is generally recommended to avoid ibuprofen during pregnancy, especially during the third trimester. Acetaminophen is often preferred, but consult a doctor.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "3",
+    "question": "Explain the pathophysiology of Type 2 Diabetes.",
+    "expected_answer": "Type 2 diabetes is characterized by insulin resistance and relative insulin deficiency. Cells fail to respond to insulin, leading to hyperglycemia.",
+    "expected_mode": "doctor",
+    "rag_required": true
+  },
+  {
+    "id": "4",
+    "question": "What is the latest research on CRISPR therapies for Sickle Cell Disease?",
+    "expected_answer": "Recent approvals include Casgevy (exagamglogene autotemcel), which uses CRISPR/Cas9 to edit the BCL11A gene to increase fetal hemoglobin.",
+    "expected_mode": "deep_research",
+    "rag_required": true
+  },
+  {
+    "id": "5",
+    "question": "How do I treat a bee sting at home?",
+    "expected_answer": "Remove the stinger, wash the area with soap and water, apply a cold pack, and take an over-the-counter pain reliever if needed.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "6",
+    "question": "Is it safe to mix bleach and ammonia?",
+    "expected_answer": "No, never mix bleach and ammonia. It creates toxic chloramine gas which can be deadly.",
+    "expected_mode": "normal",
+    "rag_required": false
+  },
+  {
+    "id": "7",
+    "question": "Describe the stages of clinical trials.",
+    "expected_answer": "Phase 1: Safety and dosage. Phase 2: Efficacy and side effects. Phase 3: Efficacy vs standard of care. Phase 4: Post-marketing surveillance.",
+    "expected_mode": "deep_research",
+    "rag_required": true
+  },
+  {
+    "id": "8",
+    "question": "What are the differentials for upper right quadrant abdominal pain?",
+    "expected_answer": "Cholecystitis, biliary colic, hepatitis, hepatic abscess, peptic ulcer disease, right lower lobe pneumonia.",
+    "expected_mode": "doctor",
+    "rag_required": true
+  },
+  {
+    "id": "9",
+    "question": "Hello, how are you?",
+    "expected_answer": "I am a medical AI assistant. I am here to help you with medical questions.",
+    "expected_mode": "normal",
+    "rag_required": false
+  },
+  {
+    "id": "10",
+    "question": "I have a headache and stiff neck and fever. What should I do?",
+    "expected_answer": "These could be signs of meningitis, which is a medical emergency. Seek immediate medical attention.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "11",
+    "question": "What is the molecular mechanism of action of Aspirin?",
+    "expected_answer": "Aspirin irreversibly inhibits COX-1 and COX-2 enzymes, reducing prostaglandin and thromboxane A2 synthesis.",
+    "expected_mode": "doctor",
+    "rag_required": true
+  },
+  {
+    "id": "12",
+    "question": "Summarize the 2025 guidelines for hypertension management.",
+    "expected_answer": "Focus on accurate BP measurement, risk assessment, lifestyle modifications, and pharmacotherapy with threshhold of 130/80 mmHg for many patients.",
+    "expected_mode": "deep_research",
+    "rag_required": true
+  },
+  {
+    "id": "13",
+    "question": "Can I drink alcohol while taking Metronidazole?",
+    "expected_answer": "No, you should avoid alcohol while taking Metronidazole and for at least 48 hours after stopping, as it can cause a disulfiram-like reaction.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "14",
+    "question": "What are the side effects of chemotherapy?",
+    "expected_answer": "Fatigue, hair loss, nausea, vomiting, increased infection risk, anemia, bleeding.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "15",
+    "question": "Compare mRNA vaccines vs traditional vaccines.",
+    "expected_answer": "mRNA vaccines use genetic material to instruct cells to make a viral protein. Traditional vaccines use weakened or killed virus or viral proteins.",
+    "expected_mode": "deep_research",
+    "rag_required": true
+  },
+  {
+    "id": "16",
+    "question": "Interpret these lab results: TSH 10.5, Free T4 0.6.",
+    "expected_answer": "Elevated TSH and low Free T4 suggest primary hypothyroidism. Clinical correlation is needed.",
+    "expected_mode": "doctor",
+    "rag_required": true
+  },
+  {
+    "id": "17",
+    "question": "How much water should I drink a day?",
+    "expected_answer": "It varies, but generally about 3.7 liters for men and 2.7 liters for women, including fluids from food.",
+    "expected_mode": "normal",
+    "rag_required": true
+  },
+  {
+    "id": "18",
+    "question": "What is the glascow coma scale?",
+    "expected_answer": "A clinical scale used to reliably measure a person's level of consciousness after a brain injury, assessing eye, verbal, and motor responses.",
+    "expected_mode": "doctor",
+    "rag_required": true
+  },
+  {
+    "id": "19",
+    "question": "Tell me a joke.",
+    "expected_answer": "I am focused on medical assistance. I cannot tell jokes.",
+    "expected_mode": "normal",
+    "rag_required": false
+  },
+  {
+    "id": "20",
+    "question": "What causes Scurvy?",
+    "expected_answer": "A strict deficiency of Vitamin C (ascorbic acid).",
+    "expected_mode": "normal",
+    "rag_required": true
+  }
+]

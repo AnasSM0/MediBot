@@ -4,8 +4,9 @@ import logging
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
-import redis
-from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
 
 # Configure structured logging
 logging.basicConfig(
@@ -14,6 +15,17 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("config_check")
+
+# Lazy import helpers
+redis = None
+RedisConnectionError = None
+RedisTimeoutError = None
+
+try:
+    import redis
+    from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
+except ImportError:
+    pass
 
 def check_env_vars():
     """Validate presence of critical environment variables."""

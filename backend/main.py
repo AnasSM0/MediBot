@@ -13,9 +13,8 @@ from check_config import validate_config
 
 # FAIL-FAST: Validate configuration before app startup
 # This prevents the application from booting in a degraded state.
-validate_config()
-
 load_dotenv()
+validate_config()
 
 app = FastAPI(title="MediBot Backend", default_response_class=JSONResponse)
 
